@@ -3,6 +3,6 @@
 .DS_Store
 docs
 *.html
-!public/index.html
+!dist/index.html
 ROADMAP.md
 MOBILE.md
