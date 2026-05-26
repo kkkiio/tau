@@ -72,6 +72,7 @@ import {
   shortModelName,
   toggleSetValue,
 } from './tau/format';
+import { isToolExpandable } from './tau/tool-summary';
 import type {
   AppView,
   ChatItem,
@@ -294,14 +295,20 @@ export function App() {
           break;
 
         case 'agent_end': {
-          const streamingCopyable = !streamingHasToolCallRef.current;
+          const hadToolCall = streamingHasToolCallRef.current;
+          const streamingCopyable = !hadToolCall;
           setChatStatus('ready');
           streamingIdRef.current = null;
           streamingHasToolCallRef.current = false;
           setItems((current) =>
             current.map((item) =>
               item.kind === 'message' && item.streaming
-                ? { ...item, streaming: false, copyable: streamingCopyable }
+                ? {
+                    ...item,
+                    streaming: false,
+                    copyable: streamingCopyable,
+                    presentation: hadToolCall ? 'activity' : 'normal',
+                  }
                 : item
             )
           );
@@ -327,6 +334,7 @@ export function App() {
                 reasoning: extractThinking(event.message?.content),
                 streaming: true,
                 copyable: false,
+                presentation: 'activity',
               },
             ]);
           } else if (event.message?.role === 'user') {
@@ -355,6 +363,13 @@ export function App() {
           if (!id) break;
           if (messageEvent?.type === 'toolcall_delta') {
             streamingHasToolCallRef.current = true;
+            setItems((current) =>
+              current.map((item) =>
+                item.kind === 'message' && item.id === id
+                  ? { ...item, copyable: false, presentation: 'activity' }
+                  : item
+              )
+            );
             break;
           }
           if (!delta) break;
@@ -391,6 +406,7 @@ export function App() {
                     ...(finalText !== undefined && { text: finalText }),
                     ...(finalReasoning !== undefined && { reasoning: finalReasoning }),
                     copyable: !hasToolCalls,
+                    presentation: hasToolCalls ? 'activity' : 'normal',
                   }
                 : item
             )
@@ -862,7 +878,9 @@ export function App() {
 
   const toggleAllTools = useCallback((open: boolean) => {
     setItems((current) =>
-      current.map((item) => (item.kind === 'tool' ? { ...item, open } : item))
+      current.map((item) =>
+        item.kind === 'tool' && isToolExpandable(item) ? { ...item, open } : item
+      )
     );
   }, []);
 
@@ -1113,7 +1131,7 @@ export function App() {
 
           <div className="relative min-h-0 flex-1">
             <Conversation className="h-full">
-              <ConversationContent className="mx-auto w-full max-w-3xl gap-6 px-4 py-8">
+              <ConversationContent className="mx-auto w-full max-w-3xl gap-3 px-4 py-6">
                 {items.length === 0 ? (
                   <ConversationEmptyState
                     description="Connect to the running Pi session and send a message."

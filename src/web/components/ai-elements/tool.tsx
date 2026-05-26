@@ -1,6 +1,5 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,10 +9,9 @@ import { cn } from "@/lib/utils";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   CheckCircleIcon,
-  ChevronDownIcon,
+  ChevronRightIcon,
   CircleIcon,
   ClockIcon,
-  WrenchIcon,
   XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
@@ -25,7 +23,7 @@ export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps) => (
   <Collapsible
-    className={cn("group not-prose mb-4 w-full rounded-md border", className)}
+    className={cn("group not-prose w-full", className)}
     {...props}
   />
 );
@@ -34,6 +32,8 @@ export type ToolPart = ToolUIPart | DynamicToolUIPart;
 
 export type ToolHeaderProps = {
   title?: string;
+  summary?: ReactNode;
+  collapsible?: boolean;
   className?: string;
 } & (
   | { type: ToolUIPart["type"]; state: ToolUIPart["state"]; toolName?: never }
@@ -55,24 +55,29 @@ const statusLabels: Record<ToolPart["state"], string> = {
 };
 
 const statusIcons: Record<ToolPart["state"], ReactNode> = {
-  "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
-  "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
-  "input-available": <ClockIcon className="size-4 animate-pulse" />,
-  "input-streaming": <CircleIcon className="size-4" />,
-  "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
-  "output-denied": <XCircleIcon className="size-4 text-orange-600" />,
-  "output-error": <XCircleIcon className="size-4 text-red-600" />,
+  "approval-requested": <ClockIcon className="size-3.5 text-yellow-600" />,
+  "approval-responded": <CheckCircleIcon className="size-3.5 text-blue-600" />,
+  "input-available": <ClockIcon className="size-3.5 animate-pulse text-muted-foreground" />,
+  "input-streaming": <CircleIcon className="size-3.5 text-muted-foreground" />,
+  "output-available": <CheckCircleIcon className="size-3.5 text-green-600" />,
+  "output-denied": <XCircleIcon className="size-3.5 text-orange-600" />,
+  "output-error": <XCircleIcon className="size-3.5 text-red-600" />,
 };
 
 export const getStatusBadge = (status: ToolPart["state"]) => (
-  <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
+  <span
+    aria-label={statusLabels[status]}
+    className="inline-flex size-4 shrink-0 items-center justify-center"
+    title={statusLabels[status]}
+  >
     {statusIcons[status]}
-    {statusLabels[status]}
-  </Badge>
+  </span>
 );
 
 export const ToolHeader = ({
   className,
+  collapsible = true,
+  summary,
   title,
   type,
   state,
@@ -84,18 +89,30 @@ export const ToolHeader = ({
 
   return (
     <CollapsibleTrigger
+      disabled={!collapsible}
       className={cn(
-        "flex w-full items-center justify-between gap-4 p-3",
+        "flex w-full min-w-0 items-center justify-between gap-2 rounded-sm py-1 text-left text-sm text-muted-foreground transition-colors hover:text-foreground disabled:cursor-default disabled:hover:text-muted-foreground",
         className
       )}
       {...props}
     >
-      <div className="flex items-center gap-2">
-        <WrenchIcon className="size-4 text-muted-foreground" />
-        <span className="font-medium text-sm">{title ?? derivedName}</span>
+      <div className="flex min-w-0 items-center gap-2">
         {getStatusBadge(state)}
+        <span className="shrink-0 font-medium text-foreground/80 text-sm">
+          {title ?? derivedName}
+        </span>
+        {summary && (
+          <span
+            className="min-w-0 truncate font-mono text-muted-foreground text-xs"
+            title={typeof summary === "string" ? summary : undefined}
+          >
+            {summary}
+          </span>
+        )}
       </div>
-      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      {collapsible && (
+        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+      )}
     </CollapsibleTrigger>
   );
 };
@@ -105,7 +122,7 @@ export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 export const ToolContent = ({ className, ...props }: ToolContentProps) => (
   <CollapsibleContent
     className={cn(
-      "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 space-y-4 p-4 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+      "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:slide-in-from-top-1 mt-1 space-y-2 pb-1 pl-6 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
       className
     )}
     {...props}
@@ -117,11 +134,11 @@ export type ToolInputProps = ComponentProps<"div"> & {
 };
 
 export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden", className)} {...props}>
+  <div className={cn("space-y-1.5 overflow-hidden", className)} {...props}>
     <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
       Parameters
     </h4>
-    <div className="rounded-md bg-muted/50">
+    <div className="rounded-md bg-muted/35">
       <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
     </div>
   </div>
@@ -153,7 +170,7 @@ export const ToolOutput = ({
   }
 
   return (
-    <div className={cn("space-y-2", className)} {...props}>
+    <div className={cn("space-y-1.5", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {errorText ? "Error" : "Result"}
       </h4>
@@ -162,7 +179,7 @@ export const ToolOutput = ({
           "overflow-x-auto rounded-md text-xs [&_table]:w-full",
           errorText
             ? "bg-destructive/10 text-destructive"
-            : "bg-muted/50 text-foreground"
+            : "bg-muted/35 text-foreground"
         )}
       >
         {errorText && <div>{errorText}</div>}
