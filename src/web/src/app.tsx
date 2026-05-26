@@ -747,7 +747,6 @@ export function App() {
         setItems(syncToItems(data.entries || [], nextId));
         setSessionName(session.name || session.firstMessage || 'Session history');
         setLastUsage(findLastUsage(data.entries || []));
-        setSidebarOpen(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load session');
       }
