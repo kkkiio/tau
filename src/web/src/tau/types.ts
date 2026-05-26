@@ -29,6 +29,7 @@ export type ChatItem =
       text: string;
       reasoning?: string;
       streaming?: boolean;
+      copyable?: boolean;
       cost?: number;
       images?: PromptImage[];
     }
@@ -53,8 +54,8 @@ export type RpcEvent = {
   type: string;
   message?: PiMessage;
   assistantMessageEvent?: {
-    type: 'text_delta' | 'thinking_delta';
-    delta: string;
+    type: string;
+    delta?: string;
   };
   toolCallId?: string;
   toolName?: string;

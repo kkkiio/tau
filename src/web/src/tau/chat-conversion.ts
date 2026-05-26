@@ -27,6 +27,7 @@ export function syncToItems(
     } else if (message.role === 'assistant') {
       const text = extractText(message.content);
       const reasoning = extractThinking(message.content);
+      const toolCalls = extractToolCalls(message.content);
       if (text || reasoning) {
         items.push({
           kind: 'message',
@@ -34,11 +35,12 @@ export function syncToItems(
           role: 'assistant',
           text,
           reasoning,
+          copyable: toolCalls.length === 0,
           cost: message.usage?.cost?.total,
         });
       }
 
-      for (const call of extractToolCalls(message.content)) {
+      for (const call of toolCalls) {
         const tool: ChatItem & { kind: 'tool' } = {
           kind: 'tool',
           id: call.id || nextId('tool'),

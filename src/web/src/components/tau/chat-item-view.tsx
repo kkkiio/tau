@@ -56,7 +56,7 @@ export function ChatItemView({
   if (item.kind === 'tool') {
     return (
       <div className="w-full max-w-[95%]">
-        <Tool onOpenChange={(open) => onToggleTool(item.id, open)} open={item.open ?? item.state !== 'output-available'}>
+        <Tool onOpenChange={(open) => onToggleTool(item.id, open)} open={item.open ?? false}>
           <ToolHeader
             state={item.state}
             title={item.name}
@@ -71,7 +71,7 @@ export function ChatItemView({
     );
   }
 
-  const canCopy = item.text.trim().length > 0;
+  const canCopy = item.text.trim().length > 0 && item.copyable !== false && !item.streaming;
 
   const copyMessage = async () => {
     if (!canCopy) return;

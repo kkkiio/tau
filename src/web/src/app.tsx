@@ -57,6 +57,7 @@ import {
   SettingsPanel,
 } from './components/tau';
 import {
+  extractToolCalls,
   extractText,
   extractThinking,
   findLastUsage,
@@ -149,6 +150,7 @@ export function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const streamingIdRef = useRef<string | null>(null);
+  const streamingHasToolCallRef = useRef(false);
   const lastSentRef = useRef<string | null>(null);
   const itemCounterRef = useRef(0);
   const unreadCountRef = useRef(0);
@@ -291,12 +293,16 @@ export function App() {
           setChatStatus('streaming');
           break;
 
-        case 'agent_end':
+        case 'agent_end': {
+          const streamingCopyable = !streamingHasToolCallRef.current;
           setChatStatus('ready');
           streamingIdRef.current = null;
+          streamingHasToolCallRef.current = false;
           setItems((current) =>
             current.map((item) =>
-              item.kind === 'message' && item.streaming ? { ...item, streaming: false } : item
+              item.kind === 'message' && item.streaming
+                ? { ...item, streaming: false, copyable: streamingCopyable }
+                : item
             )
           );
           if (document.hidden) {
@@ -304,11 +310,13 @@ export function App() {
             document.title = `(${unreadCountRef.current}) ${originalTitleRef.current}`;
           }
           break;
+        }
 
         case 'message_start':
           if (event.message?.role === 'assistant') {
             const id = event.message.id || nextId('assistant');
             streamingIdRef.current = id;
+            streamingHasToolCallRef.current = extractToolCalls(event.message.content).length > 0;
             setItems((current) => [
               ...current,
               {
@@ -318,6 +326,7 @@ export function App() {
                 text: extractText(event.message?.content),
                 reasoning: extractThinking(event.message?.content),
                 streaming: true,
+                copyable: false,
               },
             ]);
           } else if (event.message?.role === 'user') {
@@ -340,14 +349,21 @@ export function App() {
           break;
 
         case 'message_update': {
-          const delta = event.assistantMessageEvent?.delta || '';
+          const messageEvent = event.assistantMessageEvent;
+          const delta = messageEvent?.delta || '';
           const id = streamingIdRef.current;
-          if (!delta || !id) break;
+          if (!id) break;
+          if (messageEvent?.type === 'toolcall_delta') {
+            streamingHasToolCallRef.current = true;
+            break;
+          }
+          if (!delta) break;
+          if (messageEvent?.type !== 'text_delta' && messageEvent?.type !== 'thinking_delta') break;
 
           setItems((current) =>
             current.map((item) => {
               if (item.kind !== 'message' || item.id !== id) return item;
-              if (event.assistantMessageEvent?.type === 'thinking_delta') {
+              if (messageEvent.type === 'thinking_delta') {
                 return { ...item, reasoning: `${item.reasoning || ''}${delta}` };
               }
               return { ...item, text: `${item.text}${delta}` };
@@ -360,20 +376,33 @@ export function App() {
           const id = streamingIdRef.current;
           if (!id) break;
           const usage = event.message?.usage;
+          const finalText = event.message ? extractText(event.message.content) : undefined;
+          const finalReasoning = event.message ? extractThinking(event.message.content) : undefined;
+          const finalToolCalls = event.message ? extractToolCalls(event.message.content) : undefined;
+          const hasToolCalls = finalToolCalls?.length ? true : streamingHasToolCallRef.current;
           setLastUsage(usage || null);
           setItems((current) =>
             current.map((item) =>
               item.kind === 'message' && item.id === id
-                ? { ...item, streaming: false, cost: usage?.cost?.total }
+                ? {
+                    ...item,
+                    streaming: false,
+                    cost: usage?.cost?.total,
+                    ...(finalText !== undefined && { text: finalText }),
+                    ...(finalReasoning !== undefined && { reasoning: finalReasoning }),
+                    copyable: !hasToolCalls,
+                  }
                 : item
             )
           );
           streamingIdRef.current = null;
+          streamingHasToolCallRef.current = false;
           break;
         }
 
         case 'tool_execution_start':
           if (!event.toolCallId) break;
+          streamingHasToolCallRef.current = true;
           setItems((current) => [
             ...current,
             {
@@ -382,7 +411,7 @@ export function App() {
               name: event.toolName || 'tool',
               input: event.args,
               state: 'input-streaming',
-              open: true,
+              open: false,
             },
           ]);
           break;
