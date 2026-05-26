@@ -22,6 +22,7 @@ import {
 } from '@/components/ai-elements/tool';
 import { cn } from '@/lib/utils';
 
+import { formatToolSummary, isToolExpandable } from '../../tau/tool-summary';
 import type { ChatItem } from '../../tau/types';
 import { ImagePreviewStrip } from './image-preview-strip';
 
@@ -54,24 +55,32 @@ export function ChatItemView({
   }
 
   if (item.kind === 'tool') {
+    const expandable = isToolExpandable(item);
+    const open = expandable ? item.open ?? false : false;
+
     return (
       <div className="w-full max-w-[95%]">
-        <Tool onOpenChange={(open) => onToggleTool(item.id, open)} open={item.open ?? false}>
+        <Tool onOpenChange={(nextOpen) => expandable && onToggleTool(item.id, nextOpen)} open={open}>
           <ToolHeader
+            collapsible={expandable}
             state={item.state}
+            summary={formatToolSummary(item)}
             title={item.name}
             type={`tool-${item.name}` as `tool-${string}`}
           />
-          <ToolContent>
-            <ToolInput input={item.input as never} />
-            <ToolOutput errorText={item.errorText} output={item.output as never} />
-          </ToolContent>
+          {expandable && (
+            <ToolContent>
+              <ToolInput input={item.input as never} />
+              <ToolOutput errorText={item.errorText} output={item.output as never} />
+            </ToolContent>
+          )}
         </Tool>
       </div>
     );
   }
 
   const canCopy = item.text.trim().length > 0 && item.copyable !== false && !item.streaming;
+  const isActivity = item.presentation === 'activity';
 
   const copyMessage = async () => {
     if (!canCopy) return;
@@ -81,21 +90,29 @@ export function ChatItemView({
   };
 
   return (
-    <Message from={item.role}>
+    <Message className={cn(isActivity && 'gap-1')} from={item.role}>
       <MessageContent
         className={cn(
           item.role === 'assistant' && 'w-full',
+          isActivity && item.role === 'assistant' && 'gap-1 text-muted-foreground',
           item.streaming && 'after:ml-1 after:animate-pulse after:content-["▋"]'
         )}
       >
         {item.images && <ImagePreviewStrip images={item.images} readonly />}
         {showThinking && item.reasoning && (
-          <Reasoning isStreaming={Boolean(item.streaming)}>
-            <ReasoningTrigger />
-            <ReasoningContent>{item.reasoning}</ReasoningContent>
+          <Reasoning className={cn(isActivity && 'mb-1')} isStreaming={Boolean(item.streaming)}>
+            <ReasoningTrigger className={cn(isActivity && 'text-xs')} />
+            <ReasoningContent className={cn(isActivity && 'mt-1 text-xs')}>{item.reasoning}</ReasoningContent>
           </Reasoning>
         )}
-        <MessageResponse>{item.text}</MessageResponse>
+        <MessageResponse
+          className={cn(
+            isActivity &&
+              'text-muted-foreground [&_ol]:my-1 [&_p]:my-0 [&_pre]:my-1 [&_ul]:my-1'
+          )}
+        >
+          {item.text}
+        </MessageResponse>
       </MessageContent>
       {canCopy && (
         <MessageActions

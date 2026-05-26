@@ -36,6 +36,7 @@ export function syncToItems(
           text,
           reasoning,
           copyable: toolCalls.length === 0,
+          presentation: toolCalls.length > 0 ? 'activity' : 'normal',
           cost: message.usage?.cost?.total,
         });
       }

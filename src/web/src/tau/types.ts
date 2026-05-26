@@ -30,6 +30,7 @@ export type ChatItem =
       reasoning?: string;
       streaming?: boolean;
       copyable?: boolean;
+      presentation?: 'normal' | 'activity';
       cost?: number;
       images?: PromptImage[];
     }
