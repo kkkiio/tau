@@ -45,9 +45,9 @@ const AUTH_PASS = TAU_SETTINGS.pass;
 const AUTH_CONFIGURED = !!(AUTH_USER && AUTH_PASS);
 let authEnabled = AUTH_CONFIGURED && TAU_SETTINGS.authEnabled !== false;
 // @ts-ignore — __dirname is provided by jiti at runtime
-const STATIC_DIR = process.env.TAU_STATIC_DIR || findPublicDir();
+const STATIC_DIR = process.env.TAU_STATIC_DIR || findStaticDir();
 
-function findPublicDir(): string {
+function findStaticDir(): string {
     const candidates: string[] = [];
     const seen = new Set<string>();
     const addCandidate = (dir: string) => {
@@ -57,7 +57,9 @@ function findPublicDir(): string {
       candidates.push(normalized);
     };
 
-    // 1) Common extension-relative paths
+    // 1) Bundled React build output, then legacy public fallback.
+    addCandidate(path.resolve(__dirname, "dist"));
+    addCandidate(path.resolve(__dirname, "../dist"));
     addCandidate(path.resolve(__dirname, "public"));
     addCandidate(path.resolve(__dirname, "../public"));
 
@@ -65,19 +67,22 @@ function findPublicDir(): string {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const pkgPath = require.resolve("tau-mirror/package.json");
-      addCandidate(path.join(path.dirname(pkgPath), "public"));
+      const pkgDir = path.dirname(pkgPath);
+      addCandidate(path.join(pkgDir, "dist"));
+      addCandidate(path.join(pkgDir, "public"));
     } catch {}
 
     // 3) Development fallback from current working directory
+    addCandidate(path.resolve(process.cwd(), "dist"));
     addCandidate(path.resolve(process.cwd(), "public"));
+    addCandidate(path.resolve(process.cwd(), "node_modules/tau-mirror/dist"));
     addCandidate(path.resolve(process.cwd(), "node_modules/tau-mirror/public"));
 
     for (const candidate of candidates) {
       if (fs.existsSync(path.join(candidate, "index.html"))) return candidate;
     }
 
-    // Keep previous fallback behavior
-    return path.resolve(process.cwd(), "public");
+    return path.resolve(process.cwd(), "dist");
 }
 const SESSIONS_DIR = path.join(process.env.HOME || "~", ".pi/agent/sessions");
 const INSTANCES_DIR = path.join(process.env.HOME || "~", ".pi/tau-instances");
@@ -170,8 +175,13 @@ const MIME_TYPES: Record<string, string> = {
   ".css": "text/css",
   ".js": "application/javascript",
   ".json": "application/json",
+  ".map": "application/json",
+  ".webmanifest": "application/manifest+json",
   ".png": "image/png",
   ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
   ".woff": "font/woff",
@@ -718,14 +728,14 @@ export default function (pi: ExtensionAPI) {
         case "compact": {
           if (ctx) {
             // Broadcast compaction start to all clients
-            broadcast({ type: "auto_compaction_start" });
+            broadcast({ type: "event", event: { type: "auto_compaction_start" } });
             ctx.compact({
               customInstructions: command.customInstructions,
               onComplete: (result: any) => {
-                broadcast({ type: "auto_compaction_end", summary: result?.summary });
+                broadcast({ type: "event", event: { type: "auto_compaction_end", summary: result?.summary } });
               },
               onError: (err: any) => {
-                broadcast({ type: "auto_compaction_end", summary: `Error: ${err.message}` });
+                broadcast({ type: "event", event: { type: "auto_compaction_end", summary: `Error: ${err.message}` } });
               },
             });
           }

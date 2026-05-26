@@ -2,21 +2,13 @@
 
 A web UI that mirrors your [Pi](https://github.com/badlogic/pi-mono) terminal session in the browser. No separate server — it runs as a Pi extension inside your existing process.
 
-![Tau dark mode](docs/images/dark.png)
-
-![Tau terracotta theme](docs/images/terracotta.png)
-
-![Settings](docs/images/settings.png)
-
-![Commands](docs/images/commands.png)
-
 ## What it does
 
 Tau connects to your running Pi TUI and gives you a second view in the browser. Same session, same messages, same tools — just a different screen. Type in the terminal or the browser, both stay in sync.
 
 - **Live mirroring** — streams messages, tool calls, and thinking blocks in real-time
-- **Works on any device** — open it on your phone, tablet, or another monitor
-- **Session browser** — view history from any past session
+- **React UI** — built with Vite, Tailwind, shadcn/ui, and AI Elements
+- **Markdown rendering** — uses Streamdown through AI Elements for streaming Markdown, code blocks, math, and Mermaid support
 - **No extra process** — the Pi extension *is* the server
 
 ## Install
@@ -42,47 +34,34 @@ Type `/qr` in the terminal to show a QR code and scan it to access via your phon
 ## Features
 
 ### Chat
-- Full markdown rendering with syntax-highlighted code blocks
-- Streaming responses with typing indicator
-- Image attachments (paste, drag & drop, or button)
-- Copy any message with one click
-- Inline diff viewer for edit tool calls (red/green lines)
-- Scroll-to-bottom button with new message indicator
-- Message queuing — type while the agent is working, messages queue and auto-send
-
-### Session Management
-- Browse all past sessions grouped by project
-- Full-text search across all session history with highlighted snippets
-- Sorted by last modified (most recent first)
-- Live session marked with a green dot
-- Historical sessions are read-only
-- Inline session rename
-- Favourite sessions, tags, and filtering
+- AI Elements conversation and message components
+- Streamdown Markdown rendering with syntax-highlighted code blocks
+- Live streaming text and thinking/reasoning blocks
+- Tool call display using AI Elements tool components
+- Image attachments with paste, drop, previews, and resizing before send
+- Queued follow-up messages while the agent is streaming
+- Scroll-to-bottom behavior from AI Elements conversation
 
 ### Model & Thinking
-- Model picker with search/filter and keyboard support
-- Thinking level toggle (off/low/medium/high)
-- Token usage percentage with context window visualiser
-- Cost tracking per session
+- Current model label
+- Searchable model picker
+- Thinking level cycle button
+- Settings for thinking level and thinking-block visibility
+- Session cost display
+- Context-window visualisation and compact suggestion
 
-### Voice Input
-- Mic button in the input area using Web Speech API (on-device dictation)
-- Live transcription into the textarea
-- Pulses red while recording
+### Sessions & Projects
+- Session sidebar with grouped projects, favourites, live-session markers, rename, and search
+- Historical session viewing in read-only mode
+- Project launcher for configured `tau.projectsDir`
 
-### File Browser
-- Right sidebar with lazy-loaded file tree
-- Navigate directories, open files natively
-- Drag files onto the input to insert their path
+### Commands & Settings
+- Command palette for compact, export HTML, session stats, and tool expand/collapse
+- Light, dark, and system theme modes
+- Auto-compaction and HTTP Basic Auth toggles when supported by the extension
+- Extension UI dialogs for select, confirm, input, editor, and notifications
 
-### Compaction
-- Manual context compaction with status display
-- Auto-compaction support
-
-### PWA
-- Installable as a standalone app on iOS, Android, and macOS
-- Custom app icons
-- Service worker with network-first caching
+The React frontend intentionally does not migrate the old File Browser, old multi-theme picker, or voice input. Light/dark/system theme support is kept.
 
 ## Configuration
 
@@ -113,7 +92,7 @@ Tau supports optional HTTP Basic Auth (browser-native login popup).
 
 Or via environment variables: `TAU_USER=pi TAU_PASS=secret pi`
 
-**2. Toggle on/off** — once credentials are configured, a "Require login" toggle appears in Settings within the Tau web UI. Flip it on to start requiring authentication, off to open it back up. The setting persists across restarts.
+**2. Toggle on/off** — use the React settings panel when credentials are configured, or set `tau.authEnabled` in `~/.pi/agent/settings.json` before starting Pi.
 
 Both HTTP and WebSocket connections are gated when enabled. The `/api/health` endpoint remains open for monitoring.
 
@@ -151,15 +130,25 @@ There's no separate server to run. The extension auto-loads when Pi starts and s
 
 ## Development
 
-Clone and point the extension at the local static files:
+Clone, install dependencies, and build the React web UI:
 
 ```bash
 git clone https://github.com/deflating/tau.git
 cd tau
-TAU_STATIC_DIR=$(pwd)/public pi
+npm install
+npm run build:web
+TAU_STATIC_DIR=$(pwd)/dist pi
 ```
 
-Edit the files in `public/` — refresh the browser to see changes.
+The current Web UI source lives in `src/web`. `public/` only contains static assets copied by Vite, such as icons and the manifest.
+
+For frontend development, run Pi with Tau on its normal port in one terminal, then run:
+
+```bash
+npm run dev:web
+```
+
+Open `http://localhost:4444`; Vite serves the React UI and proxies `/api` and `/ws` to the Tau extension on `localhost:3001`.
 
 ## License
 
