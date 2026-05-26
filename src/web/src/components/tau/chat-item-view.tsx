@@ -71,7 +71,10 @@ export function ChatItemView({
     );
   }
 
+  const canCopy = item.text.trim().length > 0;
+
   const copyMessage = async () => {
+    if (!canCopy) return;
     await onCopy(item.text);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
@@ -94,11 +97,18 @@ export function ChatItemView({
         )}
         <MessageResponse>{item.text}</MessageResponse>
       </MessageContent>
-      <MessageActions className="opacity-0 transition-opacity group-hover:opacity-100">
-        <MessageAction label="Copy message" onClick={copyMessage} tooltip="Copy">
-          {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
-        </MessageAction>
-      </MessageActions>
+      {canCopy && (
+        <MessageActions
+          className={cn(
+            'opacity-0 transition-opacity group-hover:opacity-100',
+            item.role === 'user' ? 'self-end' : 'self-start'
+          )}
+        >
+          <MessageAction label="Copy message" onClick={copyMessage} tooltip="Copy">
+            {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+          </MessageAction>
+        </MessageActions>
+      )}
     </Message>
   );
 }
