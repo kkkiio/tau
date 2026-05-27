@@ -1,25 +1,21 @@
-import type { ChatStatus } from 'ai';
-import type { ComponentType } from 'react';
+import type { ChatStatus } from "ai";
+import type { ComponentType } from "react";
 
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected';
-export type ThemeMode = 'system' | 'light' | 'dark';
-export type AppView = 'chat' | 'projects';
-export type SystemTone = 'info' | 'success' | 'error';
-export type ToolState =
-  | 'input-streaming'
-  | 'input-available'
-  | 'output-available'
-  | 'output-error';
+export type ConnectionState = "connecting" | "connected" | "disconnected";
+export type ThemeMode = "system" | "light" | "dark";
+export type AppView = "chat" | "projects";
+export type SystemTone = "info" | "success" | "error";
+export type ToolState = "input-streaming" | "input-available" | "output-available" | "output-error";
 
 export type SubagentStatus =
-  | 'queued'
-  | 'running'
-  | 'background'
-  | 'completed'
-  | 'steered'
-  | 'aborted'
-  | 'stopped'
-  | 'error';
+  | "queued"
+  | "running"
+  | "background"
+  | "completed"
+  | "steered"
+  | "aborted"
+  | "stopped"
+  | "error";
 
 export type PromptImage = {
   data: string;
@@ -27,25 +23,26 @@ export type PromptImage = {
 };
 
 export type PromptCommand = {
+  id: string;
   message: string;
   images?: PromptImage[];
 };
 
 export type ChatItem =
   | {
-      kind: 'message';
+      kind: "message";
       id: string;
-      role: 'user' | 'assistant';
+      role: "user" | "assistant";
       text: string;
       reasoning?: string;
       streaming?: boolean;
       copyable?: boolean;
-      presentation?: 'normal' | 'activity';
+      presentation?: "normal" | "activity";
       cost?: number;
       images?: PromptImage[];
     }
   | {
-      kind: 'tool';
+      kind: "tool";
       id: string;
       name: string;
       input: unknown;
@@ -55,7 +52,7 @@ export type ChatItem =
       open?: boolean;
     }
   | {
-      kind: 'system';
+      kind: "system";
       id: string;
       text: string;
       tone?: SystemTone;
@@ -78,21 +75,21 @@ export type RpcEvent = {
   name?: string;
   summary?: string;
   error?: string;
-  method?: ExtensionDialog['method'];
+  method?: ExtensionDialog["method"];
   id?: string;
   title?: string;
   options?: string[];
   timeout?: number;
   placeholder?: string;
   prefill?: string;
-  notifyType?: 'info' | 'warning' | 'error';
+  notifyType?: "info" | "warning" | "error";
   enabled?: boolean;
   model?: ModelInfo;
 };
 
 export type PiMessage = {
   id?: string;
-  role: 'user' | 'assistant' | 'toolResult' | string;
+  role: "user" | "assistant" | "toolResult" | string;
   content?: string | PiContentBlock[];
   customType?: string;
   details?: unknown;
@@ -103,10 +100,15 @@ export type PiMessage = {
 };
 
 export type PiContentBlock =
-  | { type: 'text'; text?: string }
-  | { type: 'thinking'; thinking?: string }
-  | { type: 'toolCall'; id?: string; name?: string; arguments?: unknown }
-  | { type: 'image'; data?: string; mimeType?: string; source?: { data?: string; media_type?: string } }
+  | { type: "text"; text?: string }
+  | { type: "thinking"; thinking?: string }
+  | { type: "toolCall"; id?: string; name?: string; arguments?: unknown }
+  | {
+      type: "image";
+      data?: string;
+      mimeType?: string;
+      source?: { data?: string; media_type?: string };
+    }
   | Record<string, unknown>;
 
 export type Usage = {
@@ -165,7 +167,7 @@ export type SubagentViewState = {
   outputFile?: string;
   compactionCount?: number;
   isBackground?: boolean;
-  source?: 'foreground' | 'background' | 'scheduled' | 'history' | 'event';
+  source?: "foreground" | "background" | "scheduled" | "history" | "event";
   updatedAt: number;
 };
 
@@ -209,14 +211,14 @@ export type LaunchProject = {
 
 export type ExtensionDialog = {
   id: string;
-  method: 'select' | 'confirm' | 'input' | 'editor' | 'notify';
+  method: "select" | "confirm" | "input" | "editor" | "notify";
   title?: string;
   message?: string;
   options?: string[];
   timeout?: number;
   placeholder?: string;
   prefill?: string;
-  notifyType?: 'info' | 'warning' | 'error';
+  notifyType?: "info" | "warning" | "error";
 };
 
 export type CommandAction = {

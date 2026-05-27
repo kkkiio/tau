@@ -1,41 +1,34 @@
 // Tau Service Worker — minimal, just enables PWA install
 // No aggressive caching since Tau connects to a live local server
 
-const CACHE_NAME = 'tau-v2';
+const CACHE_NAME = "tau-v2";
 
 // Cache only the app shell on install
-self.addEventListener('install', (event) => {
+self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll([
-        '/',
-        '/manifest.json',
-        '/icons/tau-192.png',
-        '/icons/tau-512.png',
-      ]);
-    })
+      return cache.addAll(["/", "/manifest.json", "/icons/tau-192.png", "/icons/tau-512.png"]);
+    }),
   );
   self.skipWaiting();
 });
 
 // Clean old caches
-self.addEventListener('activate', (event) => {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((names) => {
-      return Promise.all(
-        names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
-      );
-    })
+      return Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)));
+    }),
   );
   self.clients.claim();
 });
 
 // Network-first strategy — always try live server, fall back to cache
-self.addEventListener('fetch', (event) => {
+self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
   // Don't cache API/WebSocket requests
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) {
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/ws")) {
     return;
   }
 
@@ -43,7 +36,7 @@ self.addEventListener('fetch', (event) => {
     fetch(event.request)
       .then((response) => {
         // Update cache with fresh response
-        if (response.ok && event.request.method === 'GET') {
+        if (response.ok && event.request.method === "GET") {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
@@ -52,11 +45,14 @@ self.addEventListener('fetch', (event) => {
       .catch(() => {
         // Offline — serve from cache
         return caches.match(event.request).then((cached) => {
-          return cached || new Response('Tau is offline — start your pi session to connect.', {
-            status: 503,
-            headers: { 'Content-Type': 'text/plain' },
-          });
+          return (
+            cached ||
+            new Response("Tau is offline — start your pi session to connect.", {
+              status: 503,
+              headers: { "Content-Type": "text/plain" },
+            })
+          );
         });
-      })
+      }),
   );
 });

@@ -1,6 +1,6 @@
-import { XIcon } from 'lucide-react';
+import { XIcon } from "lucide-react";
 
-import type { PromptImage } from '../../tau/types';
+import type { PromptImage } from "../../tau/types";
 
 export function ImagePreviewStrip({
   images,
@@ -18,13 +18,9 @@ export function ImagePreviewStrip({
       {images.map((image, index) => (
         <div
           className="relative size-16 overflow-hidden rounded-md border bg-muted"
-          key={`${image.data.slice(0, 16)}-${index}`}
+          key={`${image.mimeType}-${image.data.slice(0, 64)}`}
         >
-          <img
-            alt="Attached"
-            className="size-full object-cover"
-            src={`data:${image.mimeType};base64,${image.data}`}
-          />
+          <img alt="Attached" className="size-full object-cover" src={`data:${image.mimeType};base64,${image.data}`} />
           {!readonly && (
             <button
               className="absolute right-1 top-1 rounded bg-background/80 p-0.5"

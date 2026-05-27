@@ -1,9 +1,9 @@
-import { XIcon } from 'lucide-react';
+import { XIcon } from "lucide-react";
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@/components/ui/button";
 
-import { formatTokens } from '../../tau/format';
-import type { Usage } from '../../tau/types';
+import { formatTokens } from "../../tau/format";
+import type { Usage } from "../../tau/types";
 
 export function ContextPopover({
   contextWindowSize,
@@ -19,9 +19,9 @@ export function ContextPopover({
   const totalUsed = input + cacheRead;
   const available = Math.max(0, contextWindowSize - totalUsed);
   const segments = [
-    { label: 'Cached', value: cacheRead, className: 'bg-sky-500' },
-    { label: 'Input', value: input, className: 'bg-amber-500' },
-    { label: 'Available', value: available, className: 'bg-muted' },
+    { label: "Cached", value: cacheRead, className: "bg-sky-500" },
+    { label: "Input", value: input, className: "bg-amber-500" },
+    { label: "Available", value: available, className: "bg-muted" },
   ];
   const percent = contextWindowSize ? Math.round((totalUsed / contextWindowSize) * 100) : 0;
 
@@ -38,7 +38,9 @@ export function ContextPopover({
           <div
             className={segment.className}
             key={segment.label}
-            style={{ width: `${Math.max(0, (segment.value / contextWindowSize) * 100)}%` }}
+            style={{
+              width: `${Math.max(0, (segment.value / contextWindowSize) * 100)}%`,
+            }}
           />
         ))}
       </div>

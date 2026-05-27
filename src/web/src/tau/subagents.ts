@@ -1,31 +1,13 @@
-import type {
-  RpcEvent,
-  SessionEntry,
-  SubagentStatus,
-  SubagentTokens,
-  SubagentViewState,
-} from './types';
+import type { RpcEvent, SessionEntry, SubagentStatus, SubagentTokens, SubagentViewState } from "./types";
 
 export type SubagentStateMap = Record<string, SubagentViewState>;
 
-type SubagentPatch = Partial<Omit<SubagentViewState, 'id'>> & { id: string };
+type SubagentPatch = Partial<Omit<SubagentViewState, "id">> & { id: string };
 
-const TERMINAL_STATUSES = new Set<SubagentStatus>([
-  'completed',
-  'steered',
-  'aborted',
-  'stopped',
-  'error',
-]);
+const TERMINAL_STATUSES = new Set<SubagentStatus>(["completed", "steered", "aborted", "stopped", "error"]);
 
-export function applySubagentEvent(
-  current: SubagentStateMap,
-  event: RpcEvent
-): SubagentStateMap {
-  const patches = [
-    patchFromSubagentEvent(event),
-    patchFromAgentToolEvent(event),
-  ].filter(Boolean) as SubagentPatch[];
+export function applySubagentEvent(current: SubagentStateMap, event: RpcEvent): SubagentStateMap {
+  const patches = [patchFromSubagentEvent(event), patchFromAgentToolEvent(event)].filter(Boolean) as SubagentPatch[];
 
   if (patches.length === 0) return current;
   let next = current;
@@ -42,7 +24,10 @@ export function subagentsFromEntries(entries: SessionEntry[] = []): SubagentStat
 
   for (const entry of entries) {
     for (const patch of patchesFromEntry(entry)) {
-      state = upsertSubagent(state, { ...patch, source: patch.source || 'history' });
+      state = upsertSubagent(state, {
+        ...patch,
+        source: patch.source || "history",
+      });
     }
     for (const patch of foregroundCallPatchesFromEntry(entry)) {
       foregroundCalls.set(patch.id, patch);
@@ -77,27 +62,27 @@ export function canOpenSubagentDetail(agent: SubagentViewState): boolean {
 
 export function subagentStatusLabel(status: SubagentStatus): string {
   switch (status) {
-    case 'queued':
-      return 'queued';
-    case 'running':
-      return 'running';
-    case 'background':
-      return 'background';
-    case 'completed':
-      return 'done';
-    case 'steered':
-      return 'wrapped';
-    case 'aborted':
-      return 'aborted';
-    case 'stopped':
-      return 'stopped';
-    case 'error':
-      return 'failed';
+    case "queued":
+      return "queued";
+    case "running":
+      return "running";
+    case "background":
+      return "background";
+    case "completed":
+      return "done";
+    case "steered":
+      return "wrapped";
+    case "aborted":
+      return "aborted";
+    case "stopped":
+      return "stopped";
+    case "error":
+      return "failed";
   }
 }
 
 export function formatDuration(ms?: number): string {
-  if (!ms || ms < 0) return '';
+  if (!ms || ms < 0) return "";
   if (ms < 1000) return `${ms}ms`;
   const seconds = ms / 1000;
   if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
@@ -107,39 +92,39 @@ export function formatDuration(ms?: number): string {
 }
 
 function patchFromSubagentEvent(event: RpcEvent): SubagentPatch | null {
-  if (!event.type.startsWith('subagents:')) return null;
+  if (!event.type.startsWith("subagents:")) return null;
   const payload = asRecord(event.payload);
 
   switch (event.type) {
-    case 'subagents:created': {
+    case "subagents:created": {
       const id = asString(payload.id);
       if (!id) return null;
       return {
         id,
         type: asString(payload.type),
         description: asString(payload.description),
-        status: 'queued',
+        status: "queued",
         isBackground: Boolean(payload.isBackground),
-        source: 'background',
+        source: "background",
       };
     }
-    case 'subagents:started': {
+    case "subagents:started": {
       const id = asString(payload.id);
       if (!id) return null;
       return {
         id,
         type: asString(payload.type),
         description: asString(payload.description),
-        status: 'running',
-        source: 'event',
+        status: "running",
+        source: "event",
       };
     }
-    case 'subagents:completed':
-    case 'subagents:failed': {
+    case "subagents:completed":
+    case "subagents:failed": {
       const id = asString(payload.id);
       if (!id) return null;
-      const status = normalizeStatus(asString(payload.status)) ||
-        (event.type === 'subagents:completed' ? 'completed' : 'error');
+      const status =
+        normalizeStatus(asString(payload.status)) || (event.type === "subagents:completed" ? "completed" : "error");
       return {
         id,
         type: asString(payload.type),
@@ -150,10 +135,10 @@ function patchFromSubagentEvent(event: RpcEvent): SubagentPatch | null {
         toolUses: asNumber(payload.toolUses),
         durationMs: asNumber(payload.durationMs),
         tokens: asTokens(payload.tokens),
-        source: 'background',
+        source: "background",
       };
     }
-    case 'subagents:compacted': {
+    case "subagents:compacted": {
       const id = asString(payload.id);
       if (!id) return null;
       return {
@@ -163,16 +148,16 @@ function patchFromSubagentEvent(event: RpcEvent): SubagentPatch | null {
         compactionCount: asNumber(payload.compactionCount),
       };
     }
-    case 'subagents:scheduled': {
-      if (payload.type !== 'fired') return null;
+    case "subagents:scheduled": {
+      if (payload.type !== "fired") return null;
       const id = asString(payload.agentId);
       if (!id) return null;
       return {
         id,
         description: asString(payload.name),
-        status: 'running',
+        status: "running",
         isBackground: true,
-        source: 'scheduled',
+        source: "scheduled",
       };
     }
     default:
@@ -182,16 +167,14 @@ function patchFromSubagentEvent(event: RpcEvent): SubagentPatch | null {
 
 function patchFromAgentToolEvent(event: RpcEvent): SubagentPatch | null {
   if (!isAgentToolEvent(event)) return null;
-  const details = extractAgentDetails(
-    event.type === 'tool_execution_update' ? event.partialResult : event.result
-  );
+  const details = extractAgentDetails(event.type === "tool_execution_update" ? event.partialResult : event.result);
   if (!details) return null;
   const id = asString(details.agentId);
   if (!id) return null;
 
   const status = normalizeStatus(asString(details.status));
   const finalResponse =
-    status && status !== 'background' && status !== 'running'
+    status && status !== "background" && status !== "running"
       ? extractFinalAgentResponse(event.result, status)
       : undefined;
 
@@ -199,33 +182,35 @@ function patchFromAgentToolEvent(event: RpcEvent): SubagentPatch | null {
     id,
     type: asString(details.subagentType),
     description: asString(details.description),
-    status: status || 'running',
+    status: status || "running",
     finalResponse,
-    error: asString(details.error) || (status === 'error' ? finalResponse : undefined),
+    error: asString(details.error) || (status === "error" ? finalResponse : undefined),
     toolUses: asNumber(details.toolUses),
     durationMs: asNumber(details.durationMs),
-    source: status === 'background' ? 'background' : 'foreground',
+    source: status === "background" ? "background" : "foreground",
   };
 }
 
 function patchesFromEntry(entry: SessionEntry): SubagentPatch[] {
   const customType = asString(entry.customType) || asString(entry.message?.customType);
-  if (customType === 'subagents:record' || entry.type === 'subagents:record') {
+  if (customType === "subagents:record" || entry.type === "subagents:record") {
     const record = asRecord(entry.data ?? entry.payload ?? entry.value ?? entry.details ?? entry);
     const id = asString(record.id);
     if (!id) return [];
-    return [{
-      id,
-      type: asString(record.type),
-      description: asString(record.description),
-      status: normalizeStatus(asString(record.status)) || 'completed',
-      finalResponse: asString(record.result),
-      error: asString(record.error),
-      updatedAt: asNumber(record.completedAt) || asNumber(record.startedAt) || Date.now(),
-    }];
+    return [
+      {
+        id,
+        type: asString(record.type),
+        description: asString(record.description),
+        status: normalizeStatus(asString(record.status)) || "completed",
+        finalResponse: asString(record.result),
+        error: asString(record.error),
+        updatedAt: asNumber(record.completedAt) || asNumber(record.startedAt) || Date.now(),
+      },
+    ];
   }
 
-  if (customType === 'subagent-notification' || entry.type === 'custom_message') {
+  if (customType === "subagent-notification" || entry.type === "custom_message") {
     const details = asRecord(entry.message?.details ?? entry.details);
     return notificationPatches(details);
   }
@@ -234,39 +219,39 @@ function patchesFromEntry(entry: SessionEntry): SubagentPatch[] {
 }
 
 function foregroundCallPatchesFromEntry(entry: SessionEntry): SubagentPatch[] {
-  if (entry.type !== 'message' || entry.message?.role !== 'assistant') return [];
+  if (entry.type !== "message" || entry.message?.role !== "assistant") return [];
   return agentToolCallsFromContent(entry.message.content).flatMap((call) => {
     const id = asString(call.id);
     if (!id) return [];
     const args = asRecord(call.arguments);
-    return [{
-      id,
-      type: asString(args.subagent_type) || asString(args.subagentType),
-      description: asString(args.description),
-      status: 'running' as const,
-      source: 'foreground' as const,
-      updatedAt: timestampFromEntry(entry) || Date.now(),
-    }];
+    return [
+      {
+        id,
+        type: asString(args.subagent_type) || asString(args.subagentType),
+        description: asString(args.description),
+        status: "running" as const,
+        source: "foreground" as const,
+        updatedAt: timestampFromEntry(entry) || Date.now(),
+      },
+    ];
   });
 }
 
 function foregroundResultPatchFromEntry(
   entry: SessionEntry,
-  foregroundCalls: Map<string, SubagentPatch>
+  foregroundCalls: Map<string, SubagentPatch>,
 ): { patch: SubagentPatch; toolCallId: string } | null {
   const message = entry.message;
   const toolCallId = asString(message?.toolCallId);
-  if (entry.type !== 'message' || message?.role !== 'toolResult' || message.toolName !== 'Agent' || !toolCallId) {
+  if (entry.type !== "message" || message?.role !== "toolResult" || message.toolName !== "Agent" || !toolCallId) {
     return null;
   }
 
   const details = extractAgentDetails(message) || {};
   const callPatch = foregroundCalls.get(toolCallId);
-  const status = normalizeStatus(asString(details.status)) || (message.isError ? 'error' : 'completed');
+  const status = normalizeStatus(asString(details.status)) || (message.isError ? "error" : "completed");
   const finalResponse =
-    status !== 'background' && status !== 'running'
-      ? extractFinalAgentResponse(message.content, status)
-      : undefined;
+    status !== "background" && status !== "running" ? extractFinalAgentResponse(message.content, status) : undefined;
   const agentId = asString(details.agentId) || toolCallId;
 
   return {
@@ -277,10 +262,10 @@ function foregroundResultPatchFromEntry(
       description: asString(details.description) || callPatch?.description,
       status,
       finalResponse,
-      error: asString(details.error) || (message.isError || status === 'error' ? finalResponse : undefined),
+      error: asString(details.error) || (message.isError || status === "error" ? finalResponse : undefined),
       toolUses: asNumber(details.toolUses),
       durationMs: asNumber(details.durationMs),
-      source: status === 'background' ? 'background' : 'foreground',
+      source: status === "background" ? "background" : "foreground",
       updatedAt: timestampFromEntry(entry) || Date.now(),
     },
   };
@@ -292,18 +277,20 @@ function notificationPatches(details: Record<string, unknown>): SubagentPatch[] 
   return all.flatMap((detail) => {
     const id = asString(detail.id);
     if (!id) return [];
-    return [{
-      id,
-      description: asString(detail.description),
-      status: normalizeStatus(asString(detail.status)) || 'completed',
-      resultPreview: asString(detail.resultPreview),
-      error: asString(detail.error),
-      toolUses: asNumber(detail.toolUses),
-      durationMs: asNumber(detail.durationMs),
-      tokens: tokensFromTotal(asNumber(detail.totalTokens)),
-      outputFile: asString(detail.outputFile),
-      source: 'background' as const,
-    }];
+    return [
+      {
+        id,
+        description: asString(detail.description),
+        status: normalizeStatus(asString(detail.status)) || "completed",
+        resultPreview: asString(detail.resultPreview),
+        error: asString(detail.error),
+        toolUses: asNumber(detail.toolUses),
+        durationMs: asNumber(detail.durationMs),
+        tokens: tokensFromTotal(asNumber(detail.totalTokens)),
+        outputFile: asString(detail.outputFile),
+        source: "background" as const,
+      },
+    ];
   });
 }
 
@@ -315,7 +302,7 @@ function upsertSubagent(state: SubagentStateMap, patch: SubagentPatch): Subagent
   const nextAgent: SubagentViewState = {
     ...merged,
     id: patch.id,
-    status: nextStatus || patch.status || existing?.status || 'running',
+    status: nextStatus || patch.status || existing?.status || "running",
     updatedAt: Math.max(existing?.updatedAt || 0, updatedAt),
     finalResponse: patch.finalResponse || existing?.finalResponse,
     resultPreview: patch.resultPreview || existing?.resultPreview,
@@ -331,20 +318,17 @@ function upsertSubagent(state: SubagentStateMap, patch: SubagentPatch): Subagent
 
 function mergeStatus(
   current: SubagentStatus | undefined,
-  next: SubagentStatus | undefined
+  next: SubagentStatus | undefined,
 ): SubagentStatus | undefined {
   if (!next) return current;
   if (!current) return next;
   if (TERMINAL_STATUSES.has(current) && !TERMINAL_STATUSES.has(next)) return current;
-  if (current === 'running' && (next === 'queued' || next === 'background')) return current;
+  if (current === "running" && (next === "queued" || next === "background")) return current;
   return next;
 }
 
 function isAgentToolEvent(event: RpcEvent): boolean {
-  return (
-    (event.type === 'tool_execution_update' || event.type === 'tool_execution_end') &&
-    event.toolName === 'Agent'
-  );
+  return (event.type === "tool_execution_update" || event.type === "tool_execution_end") && event.toolName === "Agent";
 }
 
 function extractAgentDetails(value: unknown): Record<string, unknown> | null {
@@ -356,34 +340,34 @@ function extractAgentDetails(value: unknown): Record<string, unknown> | null {
 function extractFinalAgentResponse(value: unknown, status: SubagentStatus): string | undefined {
   const text = extractContentText(value).trim();
   if (!text) return undefined;
-  if (status === 'completed' || status === 'steered') {
+  if (status === "completed" || status === "steered") {
     const parts = text.split(/\n{2,}/);
-    if (/^Agent completed\b/.test(parts[0] || '')) {
-      return parts.slice(1).join('\n\n').trim() || text;
+    if (/^Agent completed\b/.test(parts[0] || "")) {
+      return parts.slice(1).join("\n\n").trim() || text;
     }
   }
   return text;
 }
 
 function extractContentText(value: unknown): string {
-  if (typeof value === 'string') return value;
+  if (typeof value === "string") return value;
   const record = asRecord(value);
   const content = Array.isArray(value) ? value : asArray(record.content);
-  if (content.length === 0) return '';
+  if (content.length === 0) return "";
   return content
     .map((part) => {
-      if (typeof part === 'string') return part;
+      if (typeof part === "string") return part;
       const block = asRecord(part);
       return asString(block.text);
     })
     .filter(Boolean)
-    .join('\n');
+    .join("\n");
 }
 
 function agentToolCallsFromContent(content: unknown): Array<Record<string, unknown>> {
   return asArray(content)
     .map(asRecord)
-    .filter((block) => block.type === 'toolCall' && block.name === 'Agent');
+    .filter((block) => block.type === "toolCall" && block.name === "Agent");
 }
 
 function timestampFromEntry(entry: SessionEntry): number | undefined {
@@ -401,17 +385,17 @@ function timestampFromValue(value: unknown): number | undefined {
 
 function normalizeStatus(value?: string): SubagentStatus | undefined {
   if (!value) return undefined;
-  if (value === 'failed') return 'error';
-  if (value === 'done') return 'completed';
+  if (value === "failed") return "error";
+  if (value === "done") return "completed";
   if (
-    value === 'queued' ||
-    value === 'running' ||
-    value === 'background' ||
-    value === 'completed' ||
-    value === 'steered' ||
-    value === 'aborted' ||
-    value === 'stopped' ||
-    value === 'error'
+    value === "queued" ||
+    value === "running" ||
+    value === "background" ||
+    value === "completed" ||
+    value === "steered" ||
+    value === "aborted" ||
+    value === "stopped" ||
+    value === "error"
   ) {
     return value;
   }
@@ -419,7 +403,7 @@ function normalizeStatus(value?: string): SubagentStatus | undefined {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
 
 function asArray(value: unknown): unknown[] {
@@ -427,11 +411,11 @@ function asArray(value: unknown): unknown[] {
 }
 
 function asString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function asNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function asTokens(value: unknown): SubagentTokens | undefined {

@@ -1,17 +1,8 @@
-import {
-  BotIcon,
-  CheckCircle2Icon,
-  Clock3Icon,
-  XCircleIcon,
-} from 'lucide-react';
+import { BotIcon, CheckCircle2Icon, Clock3Icon, XCircleIcon } from "lucide-react";
 
-import { formatTokens } from '../../tau/format';
-import {
-  canOpenSubagentDetail,
-  formatDuration,
-  subagentStatusLabel,
-} from '../../tau/subagents';
-import type { SubagentViewState } from '../../tau/types';
+import { formatTokens } from "../../tau/format";
+import { canOpenSubagentDetail, formatDuration, subagentStatusLabel } from "../../tau/subagents";
+import type { SubagentViewState } from "../../tau/types";
 
 export function WorkspaceStatusFloat({
   onOpenSubagent,
@@ -34,11 +25,7 @@ export function WorkspaceStatusFloat({
         ) : (
           <div className="space-y-1">
             {recentSubagents.map((agent) => (
-              <SubagentFloatRow
-                agent={agent}
-                key={agent.id}
-                onOpen={() => onOpenSubagent(agent.id)}
-              />
+              <SubagentFloatRow agent={agent} key={agent.id} onOpen={() => onOpenSubagent(agent.id)} />
             ))}
           </div>
         )}
@@ -47,36 +34,24 @@ export function WorkspaceStatusFloat({
   );
 }
 
-function SubagentFloatRow({
-  agent,
-  onOpen,
-}: {
-  agent: SubagentViewState;
-  onOpen: () => void;
-}) {
+function SubagentFloatRow({ agent, onOpen }: { agent: SubagentViewState; onOpen: () => void }) {
   const canOpen = canOpenSubagentDetail(agent);
   const content = (
     <>
       <StatusIcon agent={agent} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate font-medium text-sm">{agent.type || 'Agent'}</span>
+          <span className="truncate font-medium text-sm">{agent.type || "Agent"}</span>
           <span className="shrink-0 text-muted-foreground text-xs">{subagentStatusLabel(agent.status)}</span>
         </div>
-        <div className="truncate text-muted-foreground text-xs">
-          {agent.description || agent.id}
-        </div>
+        <div className="truncate text-muted-foreground text-xs">{agent.description || agent.id}</div>
       </div>
       <div className="shrink-0 text-muted-foreground text-xs">{subagentMetric(agent)}</div>
     </>
   );
 
   if (!canOpen) {
-    return (
-      <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
-        {content}
-      </div>
-    );
+    return <div className="flex items-center gap-2 rounded-md px-2 py-1.5">{content}</div>;
   }
 
   return (
@@ -91,23 +66,23 @@ function SubagentFloatRow({
 }
 
 function StatusIcon({ agent }: { agent: SubagentViewState }) {
-  if (agent.status === 'completed' || agent.status === 'steered') {
+  if (agent.status === "completed" || agent.status === "steered") {
     return <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />;
   }
-  if (agent.status === 'error' || agent.status === 'aborted' || agent.status === 'stopped') {
+  if (agent.status === "error" || agent.status === "aborted" || agent.status === "stopped") {
     return <XCircleIcon className="size-4 shrink-0 text-destructive" />;
   }
-  if (agent.status === 'queued' || agent.status === 'background') {
+  if (agent.status === "queued" || agent.status === "background") {
     return <Clock3Icon className="size-4 shrink-0 text-muted-foreground" />;
   }
   return <BotIcon className="size-4 shrink-0 text-sky-500" />;
 }
 
 function subagentMetric(agent: SubagentViewState): string {
-  if (agent.error) return 'error';
+  if (agent.error) return "error";
   if (agent.toolUses) return `${agent.toolUses} tools`;
   if (agent.tokens?.total) return formatTokens(agent.tokens.total);
   const duration = formatDuration(agent.durationMs);
   if (duration) return duration;
-  return '';
+  return "";
 }

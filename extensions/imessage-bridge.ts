@@ -12,16 +12,55 @@
  *   BB_POLL_INTERVAL - Poll interval in ms (default: 2000)
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as http from "node:http";
 import * as https from "node:https";
+import * as path from "node:path";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+
+type BlueBubblesChat = {
+  chatIdentifier?: string;
+};
+
+type BlueBubblesAttachment = {
+  guid?: string;
+  mimeType?: string;
+};
+
+type BlueBubblesMessage = {
+  dateCreated?: number;
+  isFromMe?: boolean;
+  handle?: {
+    address?: string;
+  };
+  chats?: BlueBubblesChat[];
+  text?: string;
+  attachments?: BlueBubblesAttachment[];
+};
+
+type BlueBubblesResponse = {
+  data?: BlueBubblesMessage[];
+  message?: string;
+};
+
+type TextContentBlock = {
+  type: "text";
+  text: string;
+};
+
+type ImageContentBlock = {
+  type: "image";
+  source: {
+    type: "base64";
+    mediaType: string;
+    data: string;
+  };
+};
 
 const BB_PASSWORD = process.env.BB_PASSWORD || "Zawsx@12";
 const BB_URL = process.env.BB_URL || "http://localhost:1234";
 const BB_PHONE = process.env.BB_PHONE || "+61435599858";
-const BB_POLL_INTERVAL = parseInt(process.env.BB_POLL_INTERVAL || "2000");
+const BB_POLL_INTERVAL = parseInt(process.env.BB_POLL_INTERVAL || "2000", 10);
 const CHAT_GUID = `iMessage;-;${BB_PHONE}`;
 const ATTACHMENTS_DIR = path.join(process.env.HOME || "~", "claude-memory/imessage/attachments");
 
@@ -39,7 +78,7 @@ export default function (pi: ExtensionAPI) {
   // HTTP helpers
   // ═══════════════════════════════════════
 
-  function request(method: string, urlPath: string, body?: any): Promise<any> {
+  function request(method: string, urlPath: string, body?: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const url = new URL(urlPath, BB_URL);
       url.searchParams.set("password", BB_PASSWORD);
@@ -47,17 +86,24 @@ export default function (pi: ExtensionAPI) {
       const mod = url.protocol === "https:" ? https : http;
       const payload = body ? JSON.stringify(body) : undefined;
 
-      const req = mod.request(url, {
-        method,
-        headers: payload ? { "Content-Type": "application/json" } : {},
-      }, (res) => {
-        let data = "";
-        res.on("data", (chunk: Buffer) => data += chunk);
-        res.on("end", () => {
-          try { resolve(JSON.parse(data)); }
-          catch { resolve(data); }
-        });
-      });
+      const req = mod.request(
+        url,
+        {
+          method,
+          headers: payload ? { "Content-Type": "application/json" } : {},
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk: Buffer) => (data += chunk));
+          res.on("end", () => {
+            try {
+              resolve(JSON.parse(data));
+            } catch {
+              resolve(data);
+            }
+          });
+        },
+      );
 
       req.on("error", reject);
       if (payload) req.write(payload);
@@ -71,29 +117,37 @@ export default function (pi: ExtensionAPI) {
       url.searchParams.set("password", BB_PASSWORD);
 
       const mod = url.protocol === "https:" ? https : http;
-      mod.get(url, (res) => {
-        const contentType = res.headers["content-type"] || mime;
-        const extMap: Record<string, string> = {
-          "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif",
-          "image/webp": ".webp", "image/heic": ".heic",
-          "video/mp4": ".mp4", "audio/mpeg": ".mp3",
-          "audio/mp4": ".m4a", "audio/x-m4a": ".m4a",
-          "audio/aac": ".aac", "audio/caf": ".caf",
-          "application/pdf": ".pdf",
-        };
-        const isAudio = (contentType || "").startsWith("audio/");
-        const ext = extMap[contentType || ""] || "";
-        const filename = `${guid.replace(/\//g, "_")}${ext}`;
-        const filepath = path.join(ATTACHMENTS_DIR, filename);
+      mod
+        .get(url, (res) => {
+          const contentType = res.headers["content-type"] || mime;
+          const extMap: Record<string, string> = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "image/heic": ".heic",
+            "video/mp4": ".mp4",
+            "audio/mpeg": ".mp3",
+            "audio/mp4": ".m4a",
+            "audio/x-m4a": ".m4a",
+            "audio/aac": ".aac",
+            "audio/caf": ".caf",
+            "application/pdf": ".pdf",
+          };
+          const isAudio = (contentType || "").startsWith("audio/");
+          const ext = extMap[contentType || ""] || "";
+          const filename = `${guid.replace(/\//g, "_")}${ext}`;
+          const filepath = path.join(ATTACHMENTS_DIR, filename);
 
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () => {
-          fs.writeFileSync(filepath, Buffer.concat(chunks));
-          resolve({ path: filepath, isAudio });
-        });
-        res.on("error", () => resolve(null));
-      }).on("error", () => resolve(null));
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            fs.writeFileSync(filepath, Buffer.concat(chunks));
+            resolve({ path: filepath, isAudio });
+          });
+          res.on("error", () => resolve(null));
+        })
+        .on("error", () => resolve(null));
     });
   }
 
@@ -118,8 +172,9 @@ export default function (pi: ExtensionAPI) {
         chatGuid: CHAT_GUID,
         message: text,
       });
-    } catch (err: any) {
-      latestCtx?.ui.notify(`iMessage send failed: ${err.message}`, "warning");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      latestCtx?.ui.notify(`iMessage send failed: ${message}`, "warning");
     }
   }
 
@@ -135,9 +190,10 @@ export default function (pi: ExtensionAPI) {
 
   async function getLatestMessageTime(): Promise<number> {
     try {
-      const res = await request("POST", "/api/v1/message/query", {
-        limit: 1, sort: "DESC",
-      });
+      const res = (await request("POST", "/api/v1/message/query", {
+        limit: 1,
+        sort: "DESC",
+      })) as BlueBubblesResponse;
       const msgs = res?.data || [];
       return msgs.length > 0 ? msgs[0].dateCreated || 0 : 0;
     } catch {
@@ -150,12 +206,12 @@ export default function (pi: ExtensionAPI) {
     if (!enabled || !latestCtx) return;
 
     try {
-      const res = await request("POST", "/api/v1/message/query", {
+      const res = (await request("POST", "/api/v1/message/query", {
         limit: 20,
         sort: "DESC",
         after: lastMessageTime,
         with: ["chat", "handle", "attachment"],
-      });
+      })) as BlueBubblesResponse;
 
       const messages = (res?.data || []).reverse();
       setBridgeStatus("iMessage: active");
@@ -174,8 +230,8 @@ export default function (pi: ExtensionAPI) {
         const address = handle.address || "";
         const fromMatt = BB_PHONE && address.includes(BB_PHONE.replace("+", ""));
         if (!fromMatt) {
-          const chats = msg.chats || [];
-          const chatMatch = chats.some((c: any) => (c.chatIdentifier || "").includes(BB_PHONE));
+          const chats = Array.isArray(msg.chats) ? msg.chats : [];
+          const chatMatch = chats.some((c) => (c.chatIdentifier || "").includes(BB_PHONE));
           if (!chatMatch) continue;
         }
 
@@ -187,8 +243,8 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  async function processMessage(msg: any) {
-    let text = msg.text || "";
+  async function processMessage(msg: BlueBubblesMessage) {
+    const text = msg.text || "";
     const attachments = msg.attachments || [];
 
     const attachmentPaths: string[] = [];
@@ -226,12 +282,10 @@ export default function (pi: ExtensionAPI) {
 
     // Build content array with images if applicable
     const imageExts = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
-    const imageAttachments = attachmentPaths.filter(p =>
-      imageExts.some(ext => p.toLowerCase().endsWith(ext))
-    );
+    const imageAttachments = attachmentPaths.filter((p) => imageExts.some((ext) => p.toLowerCase().endsWith(ext)));
 
     if (imageAttachments.length > 0 && !voiceNotePath) {
-      const content: any[] = [];
+      const content: Array<TextContentBlock | ImageContentBlock> = [];
       if (text) content.push({ type: "text", text: `[iMessage from Matt] ${text}` });
       for (const imgPath of imageAttachments) {
         try {
@@ -240,13 +294,19 @@ export default function (pi: ExtensionAPI) {
           const mediaType = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
           content.push({
             type: "image",
-            source: { type: "base64", mediaType, data: imgData.toString("base64") },
+            source: {
+              type: "base64",
+              mediaType,
+              data: imgData.toString("base64"),
+            },
           });
         } catch {}
       }
       pi.sendUserMessage(content, { deliverAs: "followUp" });
     } else {
-      pi.sendUserMessage(`[iMessage from Matt] ${fullMessage}`, { deliverAs: "followUp" });
+      pi.sendUserMessage(`[iMessage from Matt] ${fullMessage}`, {
+        deliverAs: "followUp",
+      });
     }
   }
 
@@ -254,7 +314,7 @@ export default function (pi: ExtensionAPI) {
   // Capture responses and send back
   // ═══════════════════════════════════════
 
-  pi.on("turn_end", async (event, ctx) => {
+  pi.on("turn_end", async (event, _ctx) => {
     if (!enabled || !waitingForReply) return;
     waitingForReply = false;
 
@@ -268,8 +328,14 @@ export default function (pi: ExtensionAPI) {
       responseText = message.content;
     } else if (Array.isArray(message.content)) {
       responseText = message.content
-        .filter((b: any) => b.type === "text")
-        .map((b: any) => b.text)
+        .filter(
+          (b): b is TextContentBlock =>
+            typeof b === "object" &&
+            b !== null &&
+            (b as { type?: unknown }).type === "text" &&
+            typeof (b as { text?: unknown }).text === "string",
+        )
+        .map((b) => b.text)
         .join("\n");
     }
 
@@ -314,7 +380,7 @@ export default function (pi: ExtensionAPI) {
 
     // Check if BlueBubbles is reachable
     try {
-      const res = await request("GET", "/api/v1/ping");
+      const res = (await request("GET", "/api/v1/ping")) as BlueBubblesResponse;
       if (res?.message === "pong") {
         enabled = true;
         setBridgeStatus("iMessage: active");
@@ -367,7 +433,7 @@ export default function (pi: ExtensionAPI) {
         enabled
           ? `iMessage bridge active. Polling every ${BB_POLL_INTERVAL / 1000}s. Last message time: ${lastMessageTime}`
           : "iMessage bridge disabled (BlueBubbles unreachable)",
-        "info"
+        "info",
       );
     },
   });

@@ -1,11 +1,11 @@
-import { CheckIcon } from 'lucide-react';
+import { CheckIcon } from "lucide-react";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-import { formatTokens, shortModelName } from '../../tau/format';
-import type { ModelInfo } from '../../tau/types';
-import { Modal } from './modal';
+import { formatTokens, shortModelName } from "../../tau/format";
+import type { ModelInfo } from "../../tau/types";
+import { Modal } from "./modal";
 
 export function ModelPicker({
   currentModel,
@@ -23,12 +23,17 @@ export function ModelPicker({
   setQuery: (query: string) => void;
 }) {
   const filtered = models.filter((model) =>
-    `${model.provider || ''} ${model.id}`.toLowerCase().includes(query.toLowerCase())
+    `${model.provider || ""} ${model.id}`.toLowerCase().includes(query.toLowerCase()),
   );
 
   return (
     <Modal onClose={onClose} title="Switch Model">
-      <Input autoFocus onChange={(event) => setQuery(event.target.value)} placeholder="Search models..." value={query} />
+      <Input
+        autoFocus
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Search models..."
+        value={query}
+      />
       <div className="mt-3 max-h-96 overflow-y-auto">
         {filtered.map((model) => (
           <button
@@ -41,7 +46,7 @@ export function ModelPicker({
               <div className="text-sm">{shortModelName(model.id)}</div>
               <div className="text-muted-foreground text-xs">
                 {model.provider}
-                {model.contextWindow ? ` / ${formatTokens(model.contextWindow)}` : ''}
+                {model.contextWindow ? ` / ${formatTokens(model.contextWindow)}` : ""}
               </div>
             </div>
             {currentModel?.id === model.id && <CheckIcon className="size-4" />}

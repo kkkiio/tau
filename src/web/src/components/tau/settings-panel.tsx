@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState } from "react";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
-import { THINKING_LEVELS } from '../../tau/constants';
-import type { ThemeMode } from '../../tau/types';
-import { Modal } from './modal';
+import { THINKING_LEVELS } from "../../tau/constants";
+import type { ThemeMode } from "../../tau/types";
+import { Modal } from "./modal";
 
 export function SettingsPanel(props: {
   authConfigured: boolean;
@@ -32,12 +32,12 @@ export function SettingsPanel(props: {
         <section className="space-y-2">
           <h3 className="font-medium text-sm">Appearance</h3>
           <div className="grid grid-cols-3 gap-2">
-            {(['system', 'light', 'dark'] as ThemeMode[]).map((theme) => (
+            {(["system", "light", "dark"] as ThemeMode[]).map((theme) => (
               <Button
                 key={theme}
                 onClick={() => props.onSetTheme(theme)}
                 type="button"
-                variant={props.themeMode === theme ? 'default' : 'outline'}
+                variant={props.themeMode === theme ? "default" : "outline"}
               >
                 {theme}
               </Button>
@@ -69,7 +69,7 @@ export function SettingsPanel(props: {
                 onClick={() => props.onSetThinking(level)}
                 size="sm"
                 type="button"
-                variant={props.thinkingLevel === level ? 'default' : 'outline'}
+                variant={props.thinkingLevel === level ? "default" : "outline"}
               >
                 {level}
               </Button>
@@ -99,10 +99,19 @@ export function SettingsPanel(props: {
 
 function SettingRow({ label, onClick, value }: { label: string; onClick: () => void; value: boolean }) {
   return (
-    <button className="flex w-full items-center justify-between rounded-md border px-3 py-2" onClick={onClick} type="button">
+    <button
+      className="flex w-full items-center justify-between rounded-md border px-3 py-2"
+      onClick={onClick}
+      type="button"
+    >
       <span className="text-sm">{label}</span>
-      <span className={cn('rounded-full px-2 py-0.5 text-xs', value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-        {value ? 'On' : 'Off'}
+      <span
+        className={cn(
+          "rounded-full px-2 py-0.5 text-xs",
+          value ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {value ? "On" : "Off"}
       </span>
     </button>
   );

@@ -1,13 +1,7 @@
-import type { CommandAction } from '../../tau/types';
-import { Modal } from './modal';
+import type { CommandAction } from "../../tau/types";
+import { Modal } from "./modal";
 
-export function CommandPalette({
-  commands,
-  onClose,
-}: {
-  commands: CommandAction[];
-  onClose: () => void;
-}) {
+export function CommandPalette({ commands, onClose }: { commands: CommandAction[]; onClose: () => void }) {
   return (
     <Modal onClose={onClose} title="Commands">
       <div className="space-y-1">

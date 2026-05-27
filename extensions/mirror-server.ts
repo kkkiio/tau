@@ -1,35 +1,177 @@
 /**
  * Mirror Server Extension
- * 
+ *
  * Starts a WebSocket + HTTP server inside the running Pi process,
  * allowing a browser to connect and mirror the TUI session in real-time.
- * 
+ *
  * - Forwards all Pi events to connected browser clients
  * - Accepts commands from the browser and executes them via the extension API
  * - Serves static files for the Tau web UI
  * - Sends full state snapshot on client connect (messages, model, etc.)
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { WebSocketServer, WebSocket } from "ws";
-import * as http from "node:http";
 import * as fs from "node:fs";
+import * as http from "node:http";
 import * as path from "node:path";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import QRCode from "qrcode";
+import { WebSocket, WebSocketServer } from "ws";
+
+type TauSettingsData = {
+  port?: string | number;
+  disabled?: boolean;
+  user?: string;
+  pass?: string;
+  authEnabled?: boolean;
+  projectsDir?: string;
+};
+
+type RunningInstance = {
+  port: number;
+  pid: number;
+  sessionFile: string;
+  cwd: string;
+};
+
+type BrowserImage = {
+  data?: string;
+  mimeType?: string;
+};
+
+type BrowserCommand = {
+  id?: string;
+  type?: string;
+  message?: string;
+  images?: BrowserImage[];
+  streamingBehavior?: string;
+  provider?: string;
+  modelId?: string;
+  level?: "off" | "minimal" | "low" | "medium" | "high";
+  name?: string;
+  customInstructions?: string;
+  outputPath?: string;
+  enabled?: boolean;
+};
+
+type BrowserResponse = {
+  type: "response";
+  command: string;
+  success: boolean;
+  id?: string;
+  data?: unknown;
+  error?: string;
+};
+
+type TextContentBlock = {
+  type: "text";
+  text: string;
+};
+
+type ImageContentBlock = {
+  type: "image";
+  data: string;
+  mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+};
+
+type SessionEntry = {
+  type?: string;
+  id?: string;
+  timestamp?: string;
+  cwd?: string;
+  name?: string;
+  message?: {
+    role?: string;
+    content?: unknown;
+  };
+};
+
+type ParsedSession = {
+  id: string;
+  timestamp: string;
+  name: string | null;
+  firstMessage: string | null;
+  cwd: string | null;
+};
+
+type SessionListItem = ParsedSession & {
+  file: string;
+  filePath: string;
+  mtime: number;
+  tmux?: true;
+};
+
+type ProjectSessionGroup = {
+  path: string;
+  dirName: string;
+  sessions: SessionListItem[];
+};
+
+type FileListItem = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number | null;
+  mtime: number;
+};
+
+type SearchMatch = {
+  role: string;
+  snippet: string;
+};
+
+type SearchResult = {
+  filePath: string;
+  project: string;
+  sessionId: string;
+  sessionName: string;
+  sessionTimestamp: string;
+  firstMessage: string;
+  matches: SearchMatch[];
+};
+
+type ModelCandidate = {
+  provider?: string;
+  id?: string;
+};
+
+type ExtensionAPIWithEvents = ExtensionAPI & {
+  events?: {
+    on?: (eventType: string, listener: (payload: unknown) => void) => void;
+  };
+};
+
+type AliveWebSocket = WebSocket & {
+  isAlive?: boolean;
+};
+
+type WritableSocket = Pick<WebSocket, "readyState" | "send">;
+
+type NodeError = Error & {
+  code?: string;
+};
 
 // Load tau settings from ~/.pi/agent/settings.json (falls back to env vars)
-function loadTauSettings(): { port: number; autoStart: boolean; user: string; pass: string; authEnabled?: boolean; projectsDir?: string } {
-  let settings: any = {};
+function loadTauSettings(): {
+  port: number;
+  autoStart: boolean;
+  user: string;
+  pass: string;
+  authEnabled?: boolean;
+  projectsDir?: string;
+} {
+  let settings: TauSettingsData = {};
   try {
     const settingsPath = path.join(process.env.HOME || "~", ".pi/agent/settings.json");
-    settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")).tau || {};
+    settings =
+      (
+        JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
+          tau?: TauSettingsData;
+        }
+      ).tau || {};
   } catch {}
   return {
-    port: parseInt(process.env.TAU_MIRROR_PORT || settings.port || "3001"),
-    autoStart: !(
-      process.env.TAU_DISABLED === "1" || process.env.TAU_DISABLED === "true" ||
-      settings.disabled === true
-    ),
+    port: parseInt(String(process.env.TAU_MIRROR_PORT || settings.port || "3001"), 10),
+    autoStart: !(process.env.TAU_DISABLED === "1" || process.env.TAU_DISABLED === "true" || settings.disabled === true),
     user: process.env.TAU_USER || settings.user || "",
     pass: process.env.TAU_PASS || settings.pass || "",
     authEnabled: settings.authEnabled,
@@ -44,45 +186,45 @@ const AUTH_USER = TAU_SETTINGS.user;
 const AUTH_PASS = TAU_SETTINGS.pass;
 const AUTH_CONFIGURED = !!(AUTH_USER && AUTH_PASS);
 let authEnabled = AUTH_CONFIGURED && TAU_SETTINGS.authEnabled !== false;
-// @ts-ignore — __dirname is provided by jiti at runtime
+// @ts-expect-error — __dirname is provided by jiti at runtime
 const STATIC_DIR = process.env.TAU_STATIC_DIR || findStaticDir();
 
 function findStaticDir(): string {
-    const candidates: string[] = [];
-    const seen = new Set<string>();
-    const addCandidate = (dir: string) => {
-      const normalized = path.resolve(dir);
-      if (seen.has(normalized)) return;
-      seen.add(normalized);
-      candidates.push(normalized);
-    };
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const addCandidate = (dir: string) => {
+    const normalized = path.resolve(dir);
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
 
-    // 1) Bundled React build output, then legacy public fallback.
-    addCandidate(path.resolve(__dirname, "dist"));
-    addCandidate(path.resolve(__dirname, "../dist"));
-    addCandidate(path.resolve(__dirname, "public"));
-    addCandidate(path.resolve(__dirname, "../public"));
+  // 1) Bundled React build output, then legacy public fallback.
+  addCandidate(path.resolve(__dirname, "dist"));
+  addCandidate(path.resolve(__dirname, "../dist"));
+  addCandidate(path.resolve(__dirname, "public"));
+  addCandidate(path.resolve(__dirname, "../public"));
 
-    // 2) Installed package path (for npm-installed extension execution)
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const pkgPath = require.resolve("tau-mirror/package.json");
-      const pkgDir = path.dirname(pkgPath);
-      addCandidate(path.join(pkgDir, "dist"));
-      addCandidate(path.join(pkgDir, "public"));
-    } catch {}
+  // 2) Installed package path (for npm-installed extension execution)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pkgPath = require.resolve("tau-mirror/package.json");
+    const pkgDir = path.dirname(pkgPath);
+    addCandidate(path.join(pkgDir, "dist"));
+    addCandidate(path.join(pkgDir, "public"));
+  } catch {}
 
-    // 3) Development fallback from current working directory
-    addCandidate(path.resolve(process.cwd(), "dist"));
-    addCandidate(path.resolve(process.cwd(), "public"));
-    addCandidate(path.resolve(process.cwd(), "node_modules/tau-mirror/dist"));
-    addCandidate(path.resolve(process.cwd(), "node_modules/tau-mirror/public"));
+  // 3) Development fallback from current working directory
+  addCandidate(path.resolve(process.cwd(), "dist"));
+  addCandidate(path.resolve(process.cwd(), "public"));
+  addCandidate(path.resolve(process.cwd(), "node_modules/tau-mirror/dist"));
+  addCandidate(path.resolve(process.cwd(), "node_modules/tau-mirror/public"));
 
-    for (const candidate of candidates) {
-      if (fs.existsSync(path.join(candidate, "index.html"))) return candidate;
-    }
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, "index.html"))) return candidate;
+  }
 
-    return path.resolve(process.cwd(), "dist");
+  return path.resolve(process.cwd(), "dist");
 }
 const SESSIONS_DIR = path.join(process.env.HOME || "~", ".pi/agent/sessions");
 const INSTANCES_DIR = path.join(process.env.HOME || "~", ".pi/tau-instances");
@@ -90,7 +232,13 @@ const INSTANCES_DIR = path.join(process.env.HOME || "~", ".pi/tau-instances");
 // Instance registry — tracks all running Tau servers
 function registerInstance(port: number, sessionFile: string, cwd: string) {
   fs.mkdirSync(INSTANCES_DIR, { recursive: true });
-  const info = { port, pid: process.pid, sessionFile, cwd, startedAt: new Date().toISOString() };
+  const info = {
+    port,
+    pid: process.pid,
+    sessionFile,
+    cwd,
+    startedAt: new Date().toISOString(),
+  };
   fs.writeFileSync(path.join(INSTANCES_DIR, `${process.pid}.json`), JSON.stringify(info));
 }
 
@@ -98,30 +246,42 @@ function updateInstanceSession(sessionFile: string) {
   const file = path.join(INSTANCES_DIR, `${process.pid}.json`);
   if (!fs.existsSync(file)) return;
   try {
-    const info = JSON.parse(fs.readFileSync(file, "utf8"));
+    const info = JSON.parse(fs.readFileSync(file, "utf8")) as RunningInstance;
     info.sessionFile = sessionFile;
     fs.writeFileSync(file, JSON.stringify(info));
   } catch {}
 }
 
 function unregisterInstance() {
-  try { fs.unlinkSync(path.join(INSTANCES_DIR, `${process.pid}.json`)); } catch {}
+  try {
+    fs.unlinkSync(path.join(INSTANCES_DIR, `${process.pid}.json`));
+  } catch {}
 }
 
-function getRunningInstances(): Array<{ port: number; pid: number; sessionFile: string; cwd: string }> {
+function getRunningInstances(): Array<{
+  port: number;
+  pid: number;
+  sessionFile: string;
+  cwd: string;
+}> {
   if (!fs.existsSync(INSTANCES_DIR)) return [];
-  const instances: any[] = [];
+  const instances: RunningInstance[] = [];
   for (const file of fs.readdirSync(INSTANCES_DIR)) {
     if (!file.endsWith(".json")) continue;
     try {
-      const info = JSON.parse(fs.readFileSync(path.join(INSTANCES_DIR, file), "utf8"));
+      const info = JSON.parse(fs.readFileSync(path.join(INSTANCES_DIR, file), "utf8")) as
+        | RunningInstance
+        | Partial<RunningInstance>;
+      if (typeof info.pid !== "number") continue;
       // Check if process is still alive
       try {
         process.kill(info.pid, 0);
-        instances.push(info);
+        instances.push(info as RunningInstance);
       } catch {
         // Process dead — clean up stale file
-        try { fs.unlinkSync(path.join(INSTANCES_DIR, file)); } catch {}
+        try {
+          fs.unlinkSync(path.join(INSTANCES_DIR, file));
+        } catch {}
       }
     } catch {}
   }
@@ -140,7 +300,10 @@ function cleanupZombieInstances() {
   for (const file of fs.readdirSync(INSTANCES_DIR)) {
     if (!file.endsWith(".json")) continue;
     try {
-      const info = JSON.parse(fs.readFileSync(path.join(INSTANCES_DIR, file), "utf8"));
+      const info = JSON.parse(fs.readFileSync(path.join(INSTANCES_DIR, file), "utf8")) as
+        | RunningInstance
+        | Partial<RunningInstance>;
+      if (typeof info.pid !== "number") continue;
       // Skip our own process
       if (info.pid === process.pid) continue;
       // Check if process is alive
@@ -148,21 +311,29 @@ function cleanupZombieInstances() {
         process.kill(info.pid, 0);
       } catch {
         // Already dead — clean up
-        try { fs.unlinkSync(path.join(INSTANCES_DIR, file)); } catch {}
+        try {
+          fs.unlinkSync(path.join(INSTANCES_DIR, file));
+        } catch {}
         continue;
       }
       // Check if process has a controlling terminal (TTY)
       // Orphaned processes from killed tmux panes lose their TTY
       try {
-        const tty = execSync(`ps -o tty= -p ${info.pid}`, { encoding: "utf8" }).trim();
+        const tty = execSync(`ps -o tty= -p ${info.pid}`, {
+          encoding: "utf8",
+        }).trim();
         if (!tty || tty === "??" || tty === "-") {
           // No terminal — this is a zombie, kill it
           process.kill(info.pid, "SIGTERM");
-          try { fs.unlinkSync(path.join(INSTANCES_DIR, file)); } catch {}
+          try {
+            fs.unlinkSync(path.join(INSTANCES_DIR, file));
+          } catch {}
         }
       } catch {
         // ps failed — process might have died between checks, clean up
-        try { fs.unlinkSync(path.join(INSTANCES_DIR, file)); } catch {}
+        try {
+          fs.unlinkSync(path.join(INSTANCES_DIR, file));
+        } catch {}
       }
     } catch {}
   }
@@ -187,10 +358,12 @@ const MIME_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-function saveTauSetting(key: string, value: any) {
+function saveTauSetting(key: string, value: unknown) {
   const settingsPath = path.join(process.env.HOME || "~", ".pi/agent/settings.json");
   try {
-    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
+      tau?: Record<string, unknown>;
+    };
     if (!settings.tau) settings.tau = {};
     settings.tau[key] = value;
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
@@ -224,13 +397,10 @@ export default function (pi: ExtensionAPI) {
   // Store latest context reference for use in command handlers
   let latestCtx: ExtensionContext | null = null;
 
-  // Pending RPC-style requests from browser (id -> resolver)
-  const pendingRequests = new Map<string, (response: any) => void>();
-
   // ═══════════════════════════════════════
   // Helper: send to one client
   // ═══════════════════════════════════════
-  function sendTo(ws: WebSocket, data: any) {
+  function sendTo(ws: WritableSocket, data: unknown) {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(data));
     }
@@ -239,7 +409,7 @@ export default function (pi: ExtensionAPI) {
   // ═══════════════════════════════════════
   // Helper: broadcast to all clients
   // ═══════════════════════════════════════
-  function broadcast(data: any) {
+  function broadcast(data: unknown) {
     const json = JSON.stringify(data);
     for (const client of clients) {
       if (client.readyState === WebSocket.OPEN) {
@@ -275,11 +445,15 @@ export default function (pi: ExtensionAPI) {
         client.close();
       }
       clients.clear();
-      try { wss.close(); } catch {}
+      try {
+        wss.close();
+      } catch {}
       wss = null;
     }
     if (server) {
-      try { server.close(); } catch {}
+      try {
+        server.close();
+      } catch {}
       server = null;
     }
     unregisterInstance();
@@ -351,22 +525,34 @@ export default function (pi: ExtensionAPI) {
   // Event forwarding — subscribe to all Pi events
   // ═══════════════════════════════════════
   const eventTypes = [
-    "agent_start", "agent_end",
-    "turn_start", "turn_end",
-    "message_start", "message_update", "message_end",
-    "tool_execution_start", "tool_execution_update", "tool_execution_end",
-    "auto_compaction_start", "auto_compaction_end",
-    "auto_retry_start", "auto_retry_end",
+    "agent_start",
+    "agent_end",
+    "turn_start",
+    "turn_end",
+    "message_start",
+    "message_update",
+    "message_end",
+    "tool_execution_start",
+    "tool_execution_update",
+    "tool_execution_end",
+    "auto_compaction_start",
+    "auto_compaction_end",
+    "auto_retry_start",
+    "auto_retry_end",
     "model_select",
   ] as const;
 
   for (const eventType of eventTypes) {
-    pi.on(eventType as any, async (event: any, ctx: ExtensionContext) => {
+    pi.on(eventType as Parameters<ExtensionAPI["on"]>[0], async (event: unknown, ctx: ExtensionContext) => {
       latestCtx = ctx;
+      const eventPayload = typeof event === "object" && event !== null ? (event as Record<string, unknown>) : {};
 
       // Forward event to all connected browser clients
       // Wrap in { type: "event", event: ... } to match the existing frontend protocol
-      broadcast({ type: "event", event: { type: eventType, ...event } });
+      broadcast({
+        type: "event",
+        event: { type: eventType, ...eventPayload },
+      });
     });
   }
 
@@ -385,7 +571,7 @@ export default function (pi: ExtensionAPI) {
   ] as const;
 
   for (const eventType of subagentEventTypes) {
-    (pi as any).events?.on?.(eventType, (payload: any) => {
+    (pi as ExtensionAPIWithEvents).events?.on?.(eventType, (payload: unknown) => {
       broadcast({ type: "event", event: { type: eventType, payload } });
     });
   }
@@ -418,7 +604,13 @@ export default function (pi: ExtensionAPI) {
     let text = "";
     if (typeof content === "string") text = content;
     else if (Array.isArray(content)) {
-      const tb = content.find((b: any) => b.type === "text");
+      const tb = content.find(
+        (b): b is TextContentBlock =>
+          typeof b === "object" &&
+          b !== null &&
+          (b as { type?: unknown }).type === "text" &&
+          typeof (b as { text?: unknown }).text === "string",
+      );
       if (tb) text = tb.text;
     }
     if (text) userMessages.push(text.substring(0, 300));
@@ -439,7 +631,10 @@ export default function (pi: ExtensionAPI) {
       pi.setSessionName(title);
       titleSet = true;
       // Broadcast to connected clients
-      broadcast({ type: "event", event: { type: "session_name", name: title } });
+      broadcast({
+        type: "event",
+        event: { type: "session_name", name: title },
+      });
     }
   });
 
@@ -462,7 +657,7 @@ export default function (pi: ExtensionAPI) {
 
     if (!bestMessage) {
       // Fall back to first message with any content
-      bestMessage = messages.find(m => m.trim().length > 0) || "";
+      bestMessage = messages.find((m) => m.trim().length > 0) || "";
     }
 
     if (!bestMessage) return null;
@@ -482,7 +677,7 @@ export default function (pi: ExtensionAPI) {
     // Truncate cleanly
     if (title.length > 60) {
       const spaceIdx = title.lastIndexOf(" ", 57);
-      title = title.substring(0, spaceIdx > 20 ? spaceIdx : 57) + "…";
+      title = `${title.substring(0, spaceIdx > 20 ? spaceIdx : 57)}…`;
     }
 
     // Capitalize first letter
@@ -522,43 +717,62 @@ export default function (pi: ExtensionAPI) {
   // ═══════════════════════════════════════
   // Handle commands from browser clients
   // ═══════════════════════════════════════
-  async function handleCommand(ws: WebSocket, command: any) {
+  async function handleCommand(ws: WritableSocket, command: BrowserCommand) {
     const id = command.id;
     const ctx = latestCtx;
 
-    const success = (cmd: string, data?: any) => {
-      const resp: any = { type: "response", command: cmd, success: true, id };
+    const success = (cmd: string, data?: unknown) => {
+      const resp: BrowserResponse = {
+        type: "response",
+        command: cmd,
+        success: true,
+        id,
+      };
       if (data !== undefined) resp.data = data;
       return resp;
     };
 
     const error = (cmd: string, message: string) => {
-      return { type: "response", command: cmd, success: false, error: message, id };
+      return {
+        type: "response",
+        command: cmd,
+        success: false,
+        error: message,
+        id,
+      };
     };
 
     try {
       switch (command.type) {
         // ─── Prompting ───
         case "prompt": {
+          const message = command.message || "";
           if (ctx && !ctx.isIdle()) {
             const behavior = command.streamingBehavior || "steer";
             if (behavior === "steer") {
-              pi.sendUserMessage(command.message, { deliverAs: "steer" });
+              pi.sendUserMessage(message, { deliverAs: "steer" });
             } else {
-              pi.sendUserMessage(command.message, { deliverAs: "followUp" });
+              pi.sendUserMessage(message, { deliverAs: "followUp" });
             }
           } else {
             // Build content with optional images
-            if (command.images?.length) {
+            const images = Array.isArray(command.images) ? command.images : [];
+            if (images.length) {
               const validMimes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-              const content: any[] = [{ type: "text", text: command.message || "(see attached image)" }];
-              for (const img of command.images) {
+              const content: Array<TextContentBlock | ImageContentBlock> = [
+                { type: "text", text: message || "(see attached image)" },
+              ];
+              for (const img of images) {
                 if (!img.data || typeof img.data !== "string") {
                   continue;
                 }
                 // Strip data URL prefix if accidentally included
                 const data = img.data.includes(",") ? img.data.split(",")[1] : img.data;
-                const mimeType = (validMimes.includes(img.mimeType) ? img.mimeType : "image/png") as "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+                const mimeType = (validMimes.includes(img.mimeType) ? img.mimeType : "image/png") as
+                  | "image/png"
+                  | "image/jpeg"
+                  | "image/gif"
+                  | "image/webp";
                 const imageBlock = {
                   type: "image" as const,
                   data: data,
@@ -570,14 +784,14 @@ export default function (pi: ExtensionAPI) {
                 content.push(imageBlock);
               }
               // Only send content array if we actually have images, otherwise just text
-              const hasImages = content.some((c: any) => c.type === "image");
+              const hasImages = content.some((c) => c.type === "image");
               if (hasImages) {
                 pi.sendUserMessage(content);
               } else {
-                pi.sendUserMessage(command.message);
+                pi.sendUserMessage(message);
               }
             } else {
-              pi.sendUserMessage(command.message);
+              pi.sendUserMessage(message);
             }
           }
           sendTo(ws, success("prompt"));
@@ -585,13 +799,13 @@ export default function (pi: ExtensionAPI) {
         }
 
         case "steer": {
-          pi.sendUserMessage(command.message, { deliverAs: "steer" });
+          pi.sendUserMessage(command.message || "", { deliverAs: "steer" });
           sendTo(ws, success("steer"));
           break;
         }
 
         case "follow_up": {
-          pi.sendUserMessage(command.message, { deliverAs: "followUp" });
+          pi.sendUserMessage(command.message || "", { deliverAs: "followUp" });
           sendTo(ws, success("follow_up"));
           break;
         }
@@ -648,8 +862,8 @@ export default function (pi: ExtensionAPI) {
             break;
           }
           const models = await ctx.modelRegistry.getAvailable();
-          const model = models.find(
-            (m: any) => m.provider === command.provider && m.id === command.modelId
+          const model = (models as ModelCandidate[]).find(
+            (m) => m.provider === command.provider && m.id === command.modelId,
           );
           if (!model) {
             sendTo(ws, error("set_model", `Model not found: ${command.provider}/${command.modelId}`));
@@ -677,15 +891,18 @@ export default function (pi: ExtensionAPI) {
             sendTo(ws, success("cycle_model", null));
             break;
           }
-          const idx = availModels.findIndex(
-            (m: any) => m.provider === currentModel.provider && m.id === currentModel.id
+          const idx = (availModels as ModelCandidate[]).findIndex(
+            (m) => m.provider === currentModel.provider && m.id === currentModel.id,
           );
           const nextModel = availModels[(idx + 1) % availModels.length];
           await pi.setModel(nextModel);
-          sendTo(ws, success("cycle_model", {
-            model: nextModel,
-            thinkingLevel: pi.getThinkingLevel(),
-          }));
+          sendTo(
+            ws,
+            success("cycle_model", {
+              model: nextModel,
+              thinkingLevel: pi.getThinkingLevel(),
+            }),
+          );
           break;
         }
 
@@ -695,7 +912,7 @@ export default function (pi: ExtensionAPI) {
           const current = pi.getThinkingLevel();
           const idx = levels.indexOf(current);
           const next = levels[(idx + 1) % levels.length];
-          pi.setThinkingLevel(next as any);
+          pi.setThinkingLevel(next as BrowserCommand["level"]);
           sendTo(ws, success("cycle_thinking_level", { level: next }));
           break;
         }
@@ -714,7 +931,9 @@ export default function (pi: ExtensionAPI) {
           }
           const usage = ctx.getContextUsage();
           const entries = ctx.sessionManager.getEntries();
-          let userMessages = 0, assistantMessages = 0, toolCalls = 0;
+          let userMessages = 0,
+            assistantMessages = 0,
+            toolCalls = 0;
           for (const e of entries) {
             if (e.type === "message") {
               if (e.message?.role === "user") userMessages++;
@@ -722,14 +941,17 @@ export default function (pi: ExtensionAPI) {
               else if (e.message?.role === "toolResult") toolCalls++;
             }
           }
-          sendTo(ws, success("get_session_stats", {
-            sessionFile: ctx.sessionManager.getSessionFile(),
-            userMessages,
-            assistantMessages,
-            toolCalls,
-            totalMessages: entries.length,
-            tokens: usage ? { input: usage.tokens, total: usage.tokens } : null,
-          }));
+          sendTo(
+            ws,
+            success("get_session_stats", {
+              sessionFile: ctx.sessionManager.getSessionFile(),
+              userMessages,
+              assistantMessages,
+              toolCalls,
+              totalMessages: entries.length,
+              tokens: usage ? { input: usage.tokens, total: usage.tokens } : null,
+            }),
+          );
           break;
         }
 
@@ -754,14 +976,29 @@ export default function (pi: ExtensionAPI) {
         case "compact": {
           if (ctx) {
             // Broadcast compaction start to all clients
-            broadcast({ type: "event", event: { type: "auto_compaction_start" } });
+            broadcast({
+              type: "event",
+              event: { type: "auto_compaction_start" },
+            });
             ctx.compact({
               customInstructions: command.customInstructions,
-              onComplete: (result: any) => {
-                broadcast({ type: "event", event: { type: "auto_compaction_end", summary: result?.summary } });
+              onComplete: (result: { summary?: unknown }) => {
+                broadcast({
+                  type: "event",
+                  event: {
+                    type: "auto_compaction_end",
+                    summary: result?.summary,
+                  },
+                });
               },
-              onError: (err: any) => {
-                broadcast({ type: "event", event: { type: "auto_compaction_end", summary: `Error: ${err.message}` } });
+              onError: (err: Error) => {
+                broadcast({
+                  type: "event",
+                  event: {
+                    type: "auto_compaction_end",
+                    summary: `Error: ${err.message}`,
+                  },
+                });
               },
             });
           }
@@ -778,15 +1015,18 @@ export default function (pi: ExtensionAPI) {
             const sessionFile = ctx.sessionManager.getSessionFile();
             if (!sessionFile) throw new Error("No session file to export");
             const { execSync } = require("node:child_process");
-            const args = command.outputPath
-              ? `"${sessionFile}" "${command.outputPath}"`
-              : `"${sessionFile}"`;
-            const output = execSync(`pi --export ${args}`, { cwd: process.cwd(), timeout: 30000, encoding: "utf-8" });
+            const args = command.outputPath ? `"${sessionFile}" "${command.outputPath}"` : `"${sessionFile}"`;
+            const output = execSync(`pi --export ${args}`, {
+              cwd: process.cwd(),
+              timeout: 30000,
+              encoding: "utf-8",
+            });
             // pi prints the output path
             const result = output.trim().split("\n").pop() || sessionFile.replace(".jsonl", ".html");
             sendTo(ws, success("export_html", { path: result }));
-          } catch (e: any) {
-            sendTo(ws, error("export_html", e.message));
+          } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : String(e);
+            sendTo(ws, error("export_html", message));
           }
           break;
         }
@@ -805,7 +1045,13 @@ export default function (pi: ExtensionAPI) {
 
         // ─── Auth ───
         case "get_auth": {
-          sendTo(ws, success("get_auth", { configured: AUTH_CONFIGURED, enabled: authEnabled }));
+          sendTo(
+            ws,
+            success("get_auth", {
+              configured: AUTH_CONFIGURED,
+              enabled: authEnabled,
+            }),
+          );
           break;
         }
 
@@ -816,7 +1062,10 @@ export default function (pi: ExtensionAPI) {
           }
           authEnabled = !!command.enabled;
           saveTauSetting("authEnabled", authEnabled);
-          broadcast({ type: "event", event: { type: "auth_changed", enabled: authEnabled } });
+          broadcast({
+            type: "event",
+            event: { type: "auth_changed", enabled: authEnabled },
+          });
           sendTo(ws, success("set_auth", { enabled: authEnabled }));
           break;
         }
@@ -825,8 +1074,9 @@ export default function (pi: ExtensionAPI) {
           sendTo(ws, error(command.type, `Unknown command: ${command.type}`));
         }
       }
-    } catch (e: any) {
-      sendTo(ws, error(command.type || "unknown", e.message || String(e)));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      sendTo(ws, error(command.type || "unknown", message));
     }
   }
 
@@ -902,31 +1152,45 @@ export default function (pi: ExtensionAPI) {
       }
       const qrPromises = [QRCode.toDataURL(mirrorUrl, { width: 256, margin: 2 })];
       if (tailscaleUrl) qrPromises.push(QRCode.toDataURL(tailscaleUrl, { width: 256, margin: 2 }));
-      Promise.all(qrPromises).then((dataUrls: string[]) => {
-        const tsSection = tailscaleUrl && dataUrls[1]
-          ? `<p style="margin-top:24px;color:rgba(255,255,255,0.3);font-size:11px">TAILSCALE</p><img src="${dataUrls[1]}" width="256" height="256" alt="Tailscale QR"><a href="${tailscaleUrl}">${tailscaleUrl}</a>`
-          : "";
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(`<!DOCTYPE html>
+      Promise.all(qrPromises)
+        .then((dataUrls: string[]) => {
+          const tsSection =
+            tailscaleUrl && dataUrls[1]
+              ? `<p style="margin-top:24px;color:rgba(255,255,255,0.3);font-size:11px">TAILSCALE</p><img src="${dataUrls[1]}" width="256" height="256" alt="Tailscale QR"><a href="${tailscaleUrl}">${tailscaleUrl}</a>`
+              : "";
+          res.writeHead(200, { "Content-Type": "text/html" });
+          res.end(`<!DOCTYPE html>
 <html><head><meta name="viewport" content="width=device-width"><title>Tau — Connect</title>
 <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#131316;color:#fff;font-family:-apple-system,sans-serif}
 img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rgba(255,255,255,0.5);font-size:13px;margin-top:8px}</style>
 </head><body><p style="color:rgba(255,255,255,0.3);font-size:11px">LAN</p><img src="${dataUrls[0]}" width="256" height="256" alt="QR Code"><a href="${mirrorUrl}">${mirrorUrl}</a>${tsSection}<p style="margin-top:16px">Scan to open Tau on your phone</p></body></html>`);
-      }).catch((e: any) => {
-        res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: e.message }));
-      });
+        })
+        .catch((e: unknown) => {
+          const message = e instanceof Error ? e.message : String(e);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: message }));
+        });
       return;
     }
 
     if (urlPath === "/api/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", mode: "mirror", mirrorUrl, tailscaleUrl: tailscaleUrl || undefined }));
+      res.end(
+        JSON.stringify({
+          status: "ok",
+          mode: "mirror",
+          mirrorUrl,
+          tailscaleUrl: tailscaleUrl || undefined,
+        }),
+      );
       return;
     }
 
     if (urlPath === "/api/instances") {
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      });
       res.end(JSON.stringify({ instances: getRunningInstances() }));
       return;
     }
@@ -938,7 +1202,9 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
     if (urlPath === "/api/projects/launch" && req.method === "POST") {
       let body = "";
-      req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+      req.on("data", (chunk: Buffer) => {
+        body += chunk.toString();
+      });
       req.on("end", () => {
         try {
           const { path: projectPath } = JSON.parse(body);
@@ -958,12 +1224,15 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
           }
           const { execSync } = require("node:child_process");
           const escaped = resolved.replace(/'/g, "'\\''");
-          execSync(`osascript -e 'tell app "iTerm2" to create window with default profile command "cd '"'"'${escaped}'"'"' && pi"'`);
+          execSync(
+            `osascript -e 'tell app "iTerm2" to create window with default profile command "cd '"'"'${escaped}'"'"' && pi"'`,
+          );
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ ok: true }));
-        } catch (e: any) {
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
           res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: e.message }));
+          res.end(JSON.stringify({ error: message }));
         }
       });
       return;
@@ -984,22 +1253,27 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
     // File browser: list directory
     if (urlPath === "/api/files" || urlPath.startsWith("/api/files?")) {
-      if (req.method !== "GET") { res.writeHead(405); res.end(); return; }
+      if (req.method !== "GET") {
+        res.writeHead(405);
+        res.end();
+        return;
+      }
       try {
         const filesUrl = new URL(`http://localhost${req.url}`);
         const explicitPath = filesUrl.searchParams.get("path");
         let dirPath = explicitPath || process.cwd();
         if (!explicitPath && latestCtx) {
           try {
-            const entries = latestCtx.sessionManager.getEntries();
-            const sessionEntry = entries.find((e: any) => e.type === "session");
-            if (sessionEntry?.cwd) dirPath = sessionEntry.cwd;
+            const entries = latestCtx.sessionManager.getEntries() as SessionEntry[];
+            const sessionEntry = entries.find((e) => e.type === "session");
+            if (typeof sessionEntry?.cwd === "string") dirPath = sessionEntry.cwd;
           } catch {}
         }
         serveFileList(res, dirPath);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: err.message }));
+        res.end(JSON.stringify({ error: message }));
       }
       return;
     }
@@ -1007,7 +1281,9 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
     // File browser: open file natively
     if (urlPath === "/api/open" && req.method === "POST") {
       let body = "";
-      req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+      req.on("data", (chunk: Buffer) => {
+        body += chunk.toString();
+      });
       req.on("end", async () => {
         try {
           const { filePath: fp } = JSON.parse(body);
@@ -1022,9 +1298,10 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
           });
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ ok: true }));
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
           res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: err.message }));
+          res.end(JSON.stringify({ error: message }));
         }
       });
       return;
@@ -1040,24 +1317,27 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
     // RPC proxy — handle via WebSocket command handler
     if (urlPath === "/api/rpc" && req.method === "POST") {
       let body = "";
-      req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+      req.on("data", (chunk: Buffer) => {
+        body += chunk.toString();
+      });
       req.on("end", async () => {
         try {
-          const command = JSON.parse(body);
+          const command = JSON.parse(body) as BrowserCommand;
           // Create a fake WebSocket-like object to capture the response
-          const responsePromise = new Promise<any>((resolve) => {
-            const fakeWs = {
+          const responsePromise = new Promise<unknown>((resolve) => {
+            const fakeWs: WritableSocket = {
               readyState: WebSocket.OPEN,
-              send: (data: string) => resolve(JSON.parse(data)),
-            } as any;
+              send: (data: string | Buffer | ArrayBuffer | Buffer[]) => resolve(JSON.parse(data.toString())),
+            };
             handleCommand(fakeWs, command);
           });
           const response = await responsePromise;
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(response));
-        } catch (e: any) {
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: e.message }));
+          res.end(JSON.stringify({ error: message }));
         }
       });
       return;
@@ -1066,7 +1346,13 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
     // Session switch — in mirror mode, this is a no-op (session is controlled by TUI)
     if (urlPath === "/api/sessions/switch" && req.method === "POST") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ success: true, mirror: true, note: "Session switching is controlled by the TUI in mirror mode" }));
+      res.end(
+        JSON.stringify({
+          success: true,
+          mirror: true,
+          note: "Session switching is controlled by the TUI in mirror mode",
+        }),
+      );
       return;
     }
 
@@ -1082,22 +1368,30 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
     try {
       const { execSync } = require("node:child_process");
       // Get tmux pane PIDs
-      const paneOutput = execSync("tmux list-panes -a -F '#{pane_pid}' 2>/dev/null", { encoding: "utf8" });
+      const paneOutput = execSync("tmux list-panes -a -F '#{pane_pid}' 2>/dev/null", {
+        encoding: "utf8",
+      });
       const tmuxFiles = new Set<string>();
 
       for (const shellPid of paneOutput.trim().split("\n").filter(Boolean)) {
         try {
           // Find Pi (node) processes that are children of tmux shells
-          const children = execSync(`pgrep -P ${shellPid} 2>/dev/null`, { encoding: "utf8" });
+          const children = execSync(`pgrep -P ${shellPid} 2>/dev/null`, {
+            encoding: "utf8",
+          });
           for (const pid of children.trim().split("\n").filter(Boolean)) {
             // Check what .jsonl files this process has open
-            const lsofOut = execSync(`lsof -p ${pid} 2>/dev/null | grep '\\.jsonl'`, { encoding: "utf8" });
+            const lsofOut = execSync(`lsof -p ${pid} 2>/dev/null | grep '\\.jsonl'`, {
+              encoding: "utf8",
+            });
             for (const line of lsofOut.trim().split("\n").filter(Boolean)) {
               const match = line.match(/\/.+\.jsonl$/);
               if (match) tmuxFiles.add(match[0]);
             }
           }
-        } catch { /* no match */ }
+        } catch {
+          /* no match */
+        }
       }
       return tmuxFiles;
     } catch {
@@ -1130,14 +1424,16 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       // Build session count + recency map from session history
       const sessionInfo = new Map<string, { count: number; lastActive: number }>();
       if (fs.existsSync(SESSIONS_DIR)) {
-        for (const dir of fs.readdirSync(SESSIONS_DIR, { withFileTypes: true })) {
+        for (const dir of fs.readdirSync(SESSIONS_DIR, {
+          withFileTypes: true,
+        })) {
           if (!dir.isDirectory()) continue;
           const decodedPath = dir.name.replace(/^--/, "/").replace(/--$/, "").replace(/-/g, "/");
           // Check if this session dir maps to a subdirectory of the projects folder
-          if (!decodedPath.startsWith(resolved + "/") && !decodedPath.startsWith(resolved)) continue;
+          if (!decodedPath.startsWith(`${resolved}/`) && !decodedPath.startsWith(resolved)) continue;
 
           const sessionDir = path.join(SESSIONS_DIR, dir.name);
-          const files = fs.readdirSync(sessionDir).filter(f => f.endsWith(".jsonl"));
+          const files = fs.readdirSync(sessionDir).filter((f) => f.endsWith(".jsonl"));
           let lastMtime = 0;
           for (const f of files) {
             try {
@@ -1145,16 +1441,19 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
               if (stat.mtimeMs > lastMtime) lastMtime = stat.mtimeMs;
             } catch {}
           }
-          sessionInfo.set(decodedPath, { count: files.length, lastActive: lastMtime });
+          sessionInfo.set(decodedPath, {
+            count: files.length,
+            lastActive: lastMtime,
+          });
         }
       }
 
       const projects = entries
-        .filter(e => e.isDirectory() && !e.name.startsWith("."))
-        .map(e => {
+        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+        .map((e) => {
           const fullPath = path.join(resolved, e.name);
           const info = sessionInfo.get(fullPath) || { count: 0, lastActive: 0 };
-          const isActive = instances.some(i => i.cwd === fullPath);
+          const isActive = instances.some((i) => i.cwd === fullPath);
           return {
             name: e.name,
             path: fullPath,
@@ -1166,9 +1465,10 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ projects }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: e.message }));
+      res.end(JSON.stringify({ error: message }));
     }
   }
 
@@ -1183,16 +1483,16 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       const tmuxFiles = getTmuxSessionFiles();
       const readline = await import("node:readline");
       const dirEntries = fs.readdirSync(SESSIONS_DIR, { withFileTypes: true });
-      const projects: any[] = [];
+      const projects: ProjectSessionGroup[] = [];
 
       for (const dir of dirEntries) {
         if (!dir.isDirectory()) continue;
 
         const projectDir = path.join(SESSIONS_DIR, dir.name);
-        const files = fs.readdirSync(projectDir).filter(f => f.endsWith(".jsonl"));
+        const files = fs.readdirSync(projectDir).filter((f) => f.endsWith(".jsonl"));
         const decodedPath = dir.name.replace(/^--/, "/").replace(/--$/, "").replace(/-/g, "/");
 
-        const sessions: any[] = [];
+        const sessions: SessionListItem[] = [];
 
         for (const file of files) {
           try {
@@ -1201,9 +1501,17 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
             if (parsed) {
               const stat = fs.statSync(filePath);
               const isTmux = tmuxFiles.has(filePath);
-              sessions.push({ ...parsed, file, filePath, mtime: stat.mtimeMs, ...(isTmux && { tmux: true }) });
+              sessions.push({
+                ...parsed,
+                file,
+                filePath,
+                mtime: stat.mtimeMs,
+                ...(isTmux && { tmux: true }),
+              });
             }
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
         }
 
         sessions.sort((a, b) => b.mtime - a.mtime);
@@ -1221,9 +1529,10 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ projects }));
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: e.message }));
+      res.end(JSON.stringify({ error: message }));
     }
   }
 
@@ -1239,7 +1548,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       return;
     }
 
-    const entries: any[] = [];
+    const entries: unknown[] = [];
     const stream = fs.createReadStream(filePath, { encoding: "utf8" });
     let buffer = "";
 
@@ -1249,14 +1558,22 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       buffer = lines.pop() || "";
       for (const line of lines) {
         if (line.trim()) {
-          try { entries.push(JSON.parse(line)); } catch { /* skip */ }
+          try {
+            entries.push(JSON.parse(line));
+          } catch {
+            /* skip */
+          }
         }
       }
     });
 
     stream.on("end", () => {
       if (buffer.trim()) {
-        try { entries.push(JSON.parse(buffer)); } catch { /* skip */ }
+        try {
+          entries.push(JSON.parse(buffer));
+        } catch {
+          /* skip */
+        }
       }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ entries }));
@@ -1271,11 +1588,14 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
   // ═══════════════════════════════════════
   // Parse session file header
   // ═══════════════════════════════════════
-  async function parseSessionFile(filePath: string, readline: any) {
+  async function parseSessionFile(
+    filePath: string,
+    readline: typeof import("node:readline"),
+  ): Promise<ParsedSession | null> {
     const stream = fs.createReadStream(filePath, { encoding: "utf8" });
     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-    let header: any = null;
+    let header: SessionEntry | null = null;
     let firstMessage: string | null = null;
     let sessionName: string | null = null;
     let userMessageCount = 0;
@@ -1286,7 +1606,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       lineCount++;
 
       try {
-        const entry = JSON.parse(line);
+        const entry = JSON.parse(line) as SessionEntry;
         if (entry.type === "session") header = entry;
         else if (entry.type === "session_info" && entry.name) sessionName = entry.name;
         else if (entry.type === "message" && entry.message?.role === "user") {
@@ -1295,12 +1615,20 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
             const content = entry.message.content;
             if (typeof content === "string") firstMessage = content.substring(0, 120);
             else if (Array.isArray(content)) {
-              const tb = content.find((b: any) => b.type === "text");
+              const tb = content.find(
+                (b): b is TextContentBlock =>
+                  typeof b === "object" &&
+                  b !== null &&
+                  (b as { type?: unknown }).type === "text" &&
+                  typeof (b as { text?: unknown }).text === "string",
+              );
               if (tb) firstMessage = tb.text.substring(0, 120);
             }
           }
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
 
       if (lineCount > 50 && firstMessage) break;
     }
@@ -1325,10 +1653,25 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
   // ═══════════════════════════════════════
 
   const IGNORED_NAMES = new Set([
-    "node_modules", ".git", "__pycache__", ".DS_Store", ".Trash",
-    ".next", ".nuxt", "dist", "build", ".cache", ".turbo",
-    "venv", ".venv", "env", ".env.local",
-    ".pi", "coverage", ".nyc_output", ".parcel-cache",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    ".DS_Store",
+    ".Trash",
+    ".next",
+    ".nuxt",
+    "dist",
+    "build",
+    ".cache",
+    ".turbo",
+    "venv",
+    ".venv",
+    "env",
+    ".env.local",
+    ".pi",
+    "coverage",
+    ".nyc_output",
+    ".parcel-cache",
   ]);
 
   function serveFileList(res: http.ServerResponse, dirPath: string) {
@@ -1340,7 +1683,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       }
 
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      const items: any[] = [];
+      const items: FileListItem[] = [];
 
       for (const entry of entries) {
         if (entry.name.startsWith(".") && entry.name !== ".env") continue;
@@ -1357,7 +1700,9 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
             size: entry.isDirectory() ? null : stat.size,
             mtime: stat.mtimeMs,
           });
-        } catch { /* skip inaccessible */ }
+        } catch {
+          /* skip inaccessible */
+        }
       }
 
       // Directories first, then files, both alphabetical
@@ -1368,9 +1713,10 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ path: dirPath, items }));
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: err.message }));
+      res.end(JSON.stringify({ error: message }));
     }
   }
 
@@ -1388,7 +1734,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
       const q = query.toLowerCase();
       const readline = await import("node:readline");
-      const results: any[] = [];
+      const results: SearchResult[] = [];
       const MAX_RESULTS = 30;
 
       if (!fs.existsSync(SESSIONS_DIR)) {
@@ -1405,7 +1751,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
         const projectDir = path.join(SESSIONS_DIR, dir.name);
         const decodedPath = dir.name.replace(/^--/, "/").replace(/--$/, "").replace(/-/g, "/");
-        const files = fs.readdirSync(projectDir).filter(f => f.endsWith(".jsonl"));
+        const files = fs.readdirSync(projectDir).filter((f) => f.endsWith(".jsonl"));
 
         for (const file of files) {
           if (results.length >= MAX_RESULTS) break;
@@ -1413,18 +1759,21 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
           try {
             const filePath = path.join(projectDir, file);
             const stream = fs.createReadStream(filePath, { encoding: "utf8" });
-            const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+            const rl = readline.createInterface({
+              input: stream,
+              crlfDelay: Infinity,
+            });
 
             let sessionId = "";
             let sessionName = "";
             let sessionTimestamp = "";
             let firstMessage = "";
-            const matches: any[] = [];
+            const matches: SearchMatch[] = [];
 
             for await (const line of rl) {
               if (!line.trim()) continue;
               try {
-                const entry = JSON.parse(line);
+                const entry = JSON.parse(line) as SessionEntry;
 
                 if (entry.type === "session") {
                   sessionId = entry.id;
@@ -1438,19 +1787,29 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
                   let text = "";
                   if (typeof content === "string") text = content;
                   else if (Array.isArray(content)) {
-                    text = content.filter((b: any) => b.type === "text").map((b: any) => b.text).join(" ");
+                    text = content
+                      .filter(
+                        (b): b is TextContentBlock =>
+                          typeof b === "object" &&
+                          b !== null &&
+                          (b as { type?: unknown }).type === "text" &&
+                          typeof (b as { text?: unknown }).text === "string",
+                      )
+                      .map((b) => b.text)
+                      .join(" ");
                   }
 
                   if (!firstMessage && entry.message?.role === "user" && text) {
                     firstMessage = text.substring(0, 120);
                   }
 
-                  if (text && text.toLowerCase().includes(q)) {
+                  if (text?.toLowerCase().includes(q)) {
                     // Extract a snippet around the match
                     const idx = text.toLowerCase().indexOf(q);
                     const start = Math.max(0, idx - 60);
                     const end = Math.min(text.length, idx + q.length + 60);
-                    const snippet = (start > 0 ? "…" : "") + text.substring(start, end) + (end < text.length ? "…" : "");
+                    const snippet =
+                      (start > 0 ? "…" : "") + text.substring(start, end) + (end < text.length ? "…" : "");
 
                     matches.push({
                       role: entry.message?.role || "unknown",
@@ -1460,7 +1819,9 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
                     if (matches.length >= 3) break; // max 3 matches per session
                   }
                 }
-              } catch { /* skip line */ }
+              } catch {
+                /* skip line */
+              }
             }
 
             rl.close();
@@ -1477,15 +1838,18 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
                 matches,
               });
             }
-          } catch { /* skip file */ }
+          } catch {
+            /* skip file */
+          }
         }
       }
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ results }));
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: err.message }));
+      res.end(JSON.stringify({ error: message }));
     }
   }
 
@@ -1503,13 +1867,18 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
     server.on("upgrade", (request, socket, head) => {
       if (authEnabled && !checkBasicAuth(request)) {
-        socket.write("HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=\"Tau\"\r\n\r\n");
+        socket.write('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm="Tau"\r\n\r\n');
         socket.destroy();
         return;
       }
       if (request.url === "/ws") {
-        wss!.handleUpgrade(request, socket, head, (ws) => {
-          wss!.emit("connection", ws, request);
+        const activeWss = wss;
+        if (!activeWss) {
+          socket.destroy();
+          return;
+        }
+        activeWss.handleUpgrade(request, socket, head, (ws) => {
+          activeWss.emit("connection", ws, request);
         });
       } else {
         socket.destroy();
@@ -1519,10 +1888,11 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
     wss.on("connection", (ws) => {
       clients.add(ws);
       updateMirrorStatus(ctx);
-      (ws as any).isAlive = true;
+      const aliveWs = ws as AliveWebSocket;
+      aliveWs.isAlive = true;
 
       ws.on("pong", () => {
-        (ws as any).isAlive = true;
+        aliveWs.isAlive = true;
       });
 
       // Send initial state
@@ -1539,7 +1909,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
         try {
           const command = JSON.parse(data.toString());
           handleCommand(ws, command);
-        } catch (e) {
+        } catch (_e) {
           sendTo(ws, { type: "error", message: "Invalid client message" });
         }
       });
@@ -1565,27 +1935,34 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
           continue;
         }
 
-        if (!(client as any).isAlive) {
-          try { client.terminate(); } catch {}
+        const aliveClient = client as AliveWebSocket;
+        if (!aliveClient.isAlive) {
+          try {
+            client.terminate();
+          } catch {}
           clients.delete(client);
           changed = true;
           continue;
         }
 
-        (client as any).isAlive = false;
-        try { client.ping(); } catch {}
+        aliveClient.isAlive = false;
+        try {
+          client.ping();
+        } catch {}
       }
       if (changed) updateMirrorStatus(ctx);
     }, 20000);
 
     const tryListen = (port: number, maxAttempts = 10) => {
-      server!.listen(port, "0.0.0.0", () => {
+      const activeServer = server;
+      if (!activeServer) return;
+      activeServer.listen(port, "0.0.0.0", () => {
         onListening(port);
       });
-      server!.once("error", (err: any) => {
+      activeServer.once("error", (err: NodeError) => {
         if (err.code === "EADDRINUSE" && port < PORT + maxAttempts) {
           ctx.ui.setStatus("mirror", `Mirror: trying port ${port + 1}`);
-          server!.removeAllListeners("error");
+          activeServer.removeAllListeners("error");
           tryListen(port + 1, maxAttempts);
         } else {
           ctx.ui.setStatus("mirror", "");
@@ -1599,7 +1976,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       // Get local IP for display — prefer en0/en1 (WiFi/Ethernet) over bridges/VPNs
       const nets = require("node:os").networkInterfaces();
       let localIp = "localhost";
-      let fallbackIp = "";
+      const fallbackIp = "";
       const preferred = ["en0", "en1"]; // WiFi and Ethernet adapters
       for (const name of preferred) {
         for (const net of nets[name] || []) {
@@ -1615,7 +1992,11 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
         for (const name of Object.keys(nets)) {
           if (name.startsWith("bridge") || name.startsWith("utun") || name.startsWith("lo")) continue;
           for (const net of nets[name] || []) {
-            if (net.family === "IPv4" && !net.internal && (net.address.startsWith("192.168.") || net.address.startsWith("10."))) {
+            if (
+              net.family === "IPv4" &&
+              !net.internal &&
+              (net.address.startsWith("192.168.") || net.address.startsWith("10."))
+            ) {
               localIp = net.address;
               break;
             }
@@ -1646,7 +2027,10 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       const sessionFile = ctx.sessionManager.getSessionFile() || "";
       registerInstance(port, sessionFile, ctx.cwd || process.cwd());
 
-      ctx.ui.notify(`Tau mirror: ${mirrorUrl}${tailscaleUrl ? `  •  Tailscale: ${tailscaleUrl}` : ""}  •  /qr for QR code`, "info");
+      ctx.ui.notify(
+        `Tau mirror: ${mirrorUrl}${tailscaleUrl ? `  •  Tailscale: ${tailscaleUrl}` : ""}  •  /qr for QR code`,
+        "info",
+      );
     };
 
     tryListen(PORT);

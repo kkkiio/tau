@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState } from "react";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
-import type { ExtensionDialog } from '../../tau/types';
-import { Modal } from './modal';
+import type { ExtensionDialog } from "../../tau/types";
+import { Modal } from "./modal";
 
 export function ExtensionDialogView({
   dialog,
@@ -16,11 +16,11 @@ export function ExtensionDialogView({
   onCancel: () => void;
   onRespond: (response: Record<string, unknown>) => void;
 }) {
-  const [value, setValue] = useState(dialog.prefill || '');
+  const [value, setValue] = useState(dialog.prefill || "");
 
-  if (dialog.method === 'notify') {
+  if (dialog.method === "notify") {
     return (
-      <Modal onClose={onCancel} title={dialog.title || dialog.notifyType || 'Notification'}>
+      <Modal onClose={onCancel} title={dialog.title || dialog.notifyType || "Notification"}>
         <p className="text-sm">{dialog.message}</p>
         <div className="mt-4 flex justify-end">
           <Button onClick={onCancel} type="button">
@@ -34,7 +34,7 @@ export function ExtensionDialogView({
   return (
     <Modal onClose={onCancel} title={dialog.title || dialog.method}>
       {dialog.message && <p className="mb-3 text-muted-foreground text-sm">{dialog.message}</p>}
-      {dialog.method === 'select' && (
+      {dialog.method === "select" && (
         <div className="space-y-2">
           {(dialog.options || []).map((option) => (
             <Button
@@ -49,7 +49,7 @@ export function ExtensionDialogView({
           ))}
         </div>
       )}
-      {dialog.method === 'confirm' && (
+      {dialog.method === "confirm" && (
         <div className="flex justify-end gap-2">
           <Button onClick={() => onRespond({ confirmed: false })} type="button" variant="outline">
             No
@@ -59,7 +59,7 @@ export function ExtensionDialogView({
           </Button>
         </div>
       )}
-      {dialog.method === 'input' && (
+      {dialog.method === "input" && (
         <form
           className="space-y-3"
           onSubmit={(event) => {
@@ -67,7 +67,12 @@ export function ExtensionDialogView({
             onRespond(value.trim() ? { value: value.trim() } : { cancelled: true });
           }}
         >
-          <Input autoFocus onChange={(event) => setValue(event.target.value)} placeholder={dialog.placeholder} value={value} />
+          <Input
+            autoFocus
+            onChange={(event) => setValue(event.target.value)}
+            placeholder={dialog.placeholder}
+            value={value}
+          />
           <div className="flex justify-end gap-2">
             <Button onClick={onCancel} type="button" variant="outline">
               Cancel
@@ -76,7 +81,7 @@ export function ExtensionDialogView({
           </div>
         </form>
       )}
-      {dialog.method === 'editor' && (
+      {dialog.method === "editor" && (
         <form
           className="space-y-3"
           onSubmit={(event) => {

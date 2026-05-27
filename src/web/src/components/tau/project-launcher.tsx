@@ -1,6 +1,6 @@
-import { CircleIcon, FolderOpenIcon, PlayIcon } from 'lucide-react';
+import { CircleIcon, FolderOpenIcon, PlayIcon } from "lucide-react";
 
-import type { LaunchProject } from '../../tau/types';
+import type { LaunchProject } from "../../tau/types";
 
 export function ProjectLauncher({
   loading,
@@ -24,7 +24,9 @@ export function ProjectLauncher({
   return (
     <div className="space-y-2">
       {[...projects]
-        .sort((a, b) => Number(Boolean(b.active)) - Number(Boolean(a.active)) || (b.lastActive || 0) - (a.lastActive || 0))
+        .sort(
+          (a, b) => Number(Boolean(b.active)) - Number(Boolean(a.active)) || (b.lastActive || 0) - (a.lastActive || 0),
+        )
         .map((project) => (
           <button
             className="flex w-full items-center gap-3 rounded-md border bg-card px-3 py-3 text-left hover:bg-muted"

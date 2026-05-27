@@ -14,20 +14,14 @@ import {
   Settings2Icon,
   TerminalIcon,
   XIcon,
-} from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
   ConversationEmptyState,
   ConversationScrollButton,
-} from '@/components/ai-elements/conversation';
+} from "@/components/ai-elements/conversation";
 import {
   PromptInput,
   PromptInputBody,
@@ -35,11 +29,11 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
-} from '@/components/ai-elements/prompt-input';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+} from "@/components/ai-elements/prompt-input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
   ChatItemView,
   CommandPalette,
@@ -54,35 +48,23 @@ import {
   SettingsPanel,
   SubagentDetailSidebar,
   WorkspaceStatusFloat,
-} from './components/tau';
+} from "./components/tau";
 import {
-  extractToolCalls,
   extractText,
   extractThinking,
+  extractToolCalls,
   findLastUsage,
   formatToolOutput,
   processPromptFiles,
   syncToItems,
-} from './tau/chat-conversion';
-import {
-  copyText,
-  formatTokens,
-  isEditableTarget,
-  shortModelName,
-  toggleSetValue,
-} from './tau/format';
-import {
-  applySubagentEvent,
-  subagentList,
-  subagentsFromEntries,
-  type SubagentStateMap,
-} from './tau/subagents';
-import { isToolExpandable } from './tau/tool-summary';
+} from "./tau/chat-conversion";
+import { copyText, formatTokens, isEditableTarget, shortModelName, toggleSetValue } from "./tau/format";
+import { applySubagentEvent, type SubagentStateMap, subagentList, subagentsFromEntries } from "./tau/subagents";
+import { isToolExpandable } from "./tau/tool-summary";
 import type {
   AppView,
   ChatItem,
   ChatSubmitStatus,
-  CommandAction,
   ConnectionState,
   ExtensionDialog,
   LaunchProject,
@@ -90,43 +72,43 @@ import type {
   ModelInfo,
   ProjectGroup,
   PromptCommand,
-  RunningInstance,
   RpcEvent,
+  RunningInstance,
   SearchResult,
   SessionInfo,
   SystemTone,
   ThemeMode,
   Usage,
-} from './tau/types';
-import { wsUrl } from './tau/ws';
+} from "./tau/types";
+import { wsUrl } from "./tau/ws";
 
 export function App() {
   const [items, setItems] = useState<ChatItem[]>([]);
-  const [connection, setConnection] = useState<ConnectionState>('connecting');
-  const [chatStatus, setChatStatus] = useState<ChatSubmitStatus>('ready');
-  const [modelLabel, setModelLabel] = useState('model');
+  const [connection, setConnection] = useState<ConnectionState>("connecting");
+  const [chatStatus, setChatStatus] = useState<ChatSubmitStatus>("ready");
+  const [modelLabel, setModelLabel] = useState("model");
   const [currentModel, setCurrentModel] = useState<ModelInfo | null>(null);
-  const [thinkingLevel, setThinkingLevel] = useState('off');
-  const [sessionName, setSessionName] = useState('Tau');
+  const [thinkingLevel, setThinkingLevel] = useState("off");
+  const [sessionName, setSessionName] = useState("Tau");
   const [error, setError] = useState<string | null>(null);
-  const [tailscaleUrl, setTailscaleUrl] = useState('');
+  const [tailscaleUrl, setTailscaleUrl] = useState("");
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
-    (localStorage.getItem('tau-theme-mode') as ThemeMode | null) || 'system'
+  const [themeMode, setThemeMode] = useState<ThemeMode>(
+    () => (localStorage.getItem("tau-theme-mode") as ThemeMode | null) || "system",
   );
-  const [systemDark, setSystemDark] = useState(() =>
-    window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
 
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 900);
-  const [view, setView] = useState<AppView>('chat');
+  const [view, setView] = useState<AppView>("chat");
   const [projects, setProjects] = useState<ProjectGroup[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionQuery, setSessionQuery] = useState('');
+  const [sessionQuery, setSessionQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-  const [favourites, setFavourites] = useState<string[]>(() =>
-    JSON.parse(localStorage.getItem('tau-favourites') || '[]') as string[]
+  const [favourites, setFavourites] = useState<string[]>(
+    () => JSON.parse(localStorage.getItem("tau-favourites") || "[]") as string[],
   );
   const [activeSessionFile, setActiveSessionFile] = useState<string | null>(null);
   const [liveSessionFile, setLiveSessionFile] = useState<string | null>(null);
@@ -140,10 +122,10 @@ export function App() {
 
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [modelOpen, setModelOpen] = useState(false);
-  const [modelSearch, setModelSearch] = useState('');
+  const [modelSearch, setModelSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [showThinking, setShowThinking] = useState(() => localStorage.getItem('tau-show-thinking') !== 'false');
+  const [showThinking, setShowThinking] = useState(() => localStorage.getItem("tau-show-thinking") !== "false");
   const [autoCompaction, setAutoCompaction] = useState(true);
   const [authConfigured, setAuthConfigured] = useState(false);
   const [authEnabled, setAuthEnabled] = useState(false);
@@ -164,7 +146,7 @@ export function App() {
   const unreadCountRef = useRef(0);
   const originalTitleRef = useRef(document.title);
 
-  const resolvedTheme = themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode;
+  const resolvedTheme = themeMode === "system" ? (systemDark ? "dark" : "light") : themeMode;
 
   const nextId = useCallback((prefix: string) => {
     itemCounterRef.current += 1;
@@ -172,13 +154,10 @@ export function App() {
   }, []);
 
   const addSystemMessage = useCallback(
-    (text: string, tone: SystemTone = 'info') => {
-      setItems((current) => [
-        ...current,
-        { kind: 'system', id: nextId('system'), text, tone },
-      ]);
+    (text: string, tone: SystemTone = "info") => {
+      setItems((current) => [...current, { kind: "system", id: nextId("system"), text, tone }]);
     },
-    [nextId]
+    [nextId],
   );
 
   const sendWs = useCallback((data: unknown) => {
@@ -190,14 +169,14 @@ export function App() {
   }, []);
 
   const rpc = useCallback(async (cmd: Record<string, unknown>) => {
-    const response = await fetch('/api/rpc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await fetch("/api/rpc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cmd),
     });
     const result = await response.json();
     if (!result.success) {
-      throw new Error(result.error || 'RPC failed');
+      throw new Error(result.error || "RPC failed");
     }
     return result;
   }, []);
@@ -205,11 +184,11 @@ export function App() {
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
     try {
-      const response = await fetch('/api/sessions');
+      const response = await fetch("/api/sessions");
       const data = await response.json();
       setProjects(data.projects || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      setError(err instanceof Error ? err.message : "Failed to load sessions");
     } finally {
       setSessionsLoading(false);
     }
@@ -217,7 +196,7 @@ export function App() {
 
   const loadInstances = useCallback(async () => {
     try {
-      const response = await fetch('/api/instances');
+      const response = await fetch("/api/instances");
       if (!response.ok) return;
       const data = await response.json();
       setLiveInstances(data.instances || []);
@@ -229,11 +208,11 @@ export function App() {
   const loadProjects = useCallback(async () => {
     setLauncherLoading(true);
     try {
-      const response = await fetch('/api/projects');
+      const response = await fetch("/api/projects");
       const data = await response.json();
       setLauncherProjects(data.projects || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load projects');
+      setError(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
       setLauncherLoading(false);
     }
@@ -242,33 +221,33 @@ export function App() {
   const refreshState = useCallback(async () => {
     try {
       const [stateResult, modelsResult] = await Promise.allSettled([
-        rpc({ type: 'get_state' }),
-        rpc({ type: 'get_available_models' }),
+        rpc({ type: "get_state" }),
+        rpc({ type: "get_available_models" }),
       ]);
 
-      if (modelsResult.status === 'fulfilled') {
+      if (modelsResult.status === "fulfilled") {
         setAvailableModels(modelsResult.value.data?.models || []);
       }
 
-      if (stateResult.status === 'fulfilled') {
+      if (stateResult.status === "fulfilled") {
         const data = stateResult.value.data || {};
         setCurrentModel(data.model || null);
-        setModelLabel(shortModelName(data.model?.id || 'model'));
-        setThinkingLevel(data.thinkingLevel || 'off');
-        setSessionName(data.sessionName || 'Tau');
+        setModelLabel(shortModelName(data.model?.id || "model"));
+        setThinkingLevel(data.thinkingLevel || "off");
+        setSessionName(data.sessionName || "Tau");
         setAutoCompaction(Boolean(data.autoCompactionEnabled));
         if (data.model?.contextWindow) setContextWindowSize(data.model.contextWindow);
       }
     } catch (err) {
-      console.error('[Tau] get_state failed', err);
+      console.error("[Tau] get_state failed", err);
     }
   }, [rpc]);
 
   const fetchHealth = useCallback(async () => {
     try {
-      const response = await fetch('/api/health');
+      const response = await fetch("/api/health");
       const data = await response.json();
-      setTailscaleUrl(data.tailscaleUrl || '');
+      setTailscaleUrl(data.tailscaleUrl || "");
     } catch {
       // Health only decorates the status label.
     }
@@ -280,13 +259,13 @@ export function App() {
       const nextSubagents = subagentsFromEntries(sync.entries ?? []);
       setItems(parsedItems);
       setSubagents(nextSubagents);
-      setSelectedSubagentId((current) => current && nextSubagents[current] ? current : null);
-      setChatStatus(sync.isStreaming ? 'streaming' : 'ready');
-      setConnection('connected');
-      setSessionName(sync.sessionName || 'Tau');
+      setSelectedSubagentId((current) => (current && nextSubagents[current] ? current : null));
+      setChatStatus(sync.isStreaming ? "streaming" : "ready");
+      setConnection("connected");
+      setSessionName(sync.sessionName || "Tau");
       setCurrentModel(sync.model || null);
-      setModelLabel(shortModelName(sync.model?.id || 'model'));
-      setThinkingLevel(sync.thinkingLevel || 'off');
+      setModelLabel(shortModelName(sync.model?.id || "model"));
+      setThinkingLevel(sync.thinkingLevel || "off");
       setLiveSessionFile(sync.sessionFile || null);
       setActiveSessionFile(sync.sessionFile || null);
       setViewingActiveSession(true);
@@ -294,7 +273,7 @@ export function App() {
       if (sync.model?.contextWindow) setContextWindowSize(sync.model.contextWindow);
       setError(null);
     },
-    [nextId]
+    [nextId],
   );
 
   const handleEvent = useCallback(
@@ -302,27 +281,27 @@ export function App() {
       setSubagents((current) => applySubagentEvent(current, event));
 
       switch (event.type) {
-        case 'agent_start':
-          setChatStatus('streaming');
+        case "agent_start":
+          setChatStatus("streaming");
           break;
 
-        case 'agent_end': {
+        case "agent_end": {
           const hadToolCall = streamingHasToolCallRef.current;
           const streamingCopyable = !hadToolCall;
-          setChatStatus('ready');
+          setChatStatus("ready");
           streamingIdRef.current = null;
           streamingHasToolCallRef.current = false;
           setItems((current) =>
             current.map((item) =>
-              item.kind === 'message' && item.streaming
+              item.kind === "message" && item.streaming
                 ? {
                     ...item,
                     streaming: false,
                     copyable: streamingCopyable,
-                    presentation: hadToolCall ? 'activity' : 'normal',
+                    presentation: hadToolCall ? "activity" : "normal",
                   }
-                : item
-            )
+                : item,
+            ),
           );
           if (document.hidden) {
             unreadCountRef.current += 1;
@@ -331,26 +310,26 @@ export function App() {
           break;
         }
 
-        case 'message_start':
-          if (event.message?.role === 'assistant') {
-            const id = event.message.id || nextId('assistant');
+        case "message_start":
+          if (event.message?.role === "assistant") {
+            const id = event.message.id || nextId("assistant");
             const hasInitialToolCall = extractToolCalls(event.message.content).length > 0;
             streamingIdRef.current = id;
             streamingHasToolCallRef.current = hasInitialToolCall;
             setItems((current) => [
               ...current,
               {
-                kind: 'message',
+                kind: "message",
                 id,
-                role: 'assistant',
+                role: "assistant",
                 text: extractText(event.message?.content),
                 reasoning: extractThinking(event.message?.content),
                 streaming: true,
                 copyable: false,
-                presentation: hasInitialToolCall ? 'activity' : 'normal',
+                presentation: hasInitialToolCall ? "activity" : "normal",
               },
             ]);
-          } else if (event.message?.role === 'user') {
+          } else if (event.message?.role === "user") {
             const text = extractText(event.message.content);
             if (!text) break;
             if (lastSentRef.current === text) {
@@ -360,47 +339,50 @@ export function App() {
             setItems((current) => [
               ...current,
               {
-                kind: 'message',
-                id: event.message?.id || nextId('user'),
-                role: 'user',
+                kind: "message",
+                id: event.message?.id || nextId("user"),
+                role: "user",
                 text,
               },
             ]);
           }
           break;
 
-        case 'message_update': {
+        case "message_update": {
           const messageEvent = event.assistantMessageEvent;
-          const delta = messageEvent?.delta || '';
+          const delta = messageEvent?.delta || "";
           const id = streamingIdRef.current;
           if (!id) break;
-          if (messageEvent?.type === 'toolcall_delta') {
+          if (messageEvent?.type === "toolcall_delta") {
             streamingHasToolCallRef.current = true;
             setItems((current) =>
               current.map((item) =>
-                item.kind === 'message' && item.id === id
-                  ? { ...item, copyable: false, presentation: 'activity' }
-                  : item
-              )
+                item.kind === "message" && item.id === id
+                  ? { ...item, copyable: false, presentation: "activity" }
+                  : item,
+              ),
             );
             break;
           }
           if (!delta) break;
-          if (messageEvent?.type !== 'text_delta' && messageEvent?.type !== 'thinking_delta') break;
+          if (messageEvent?.type !== "text_delta" && messageEvent?.type !== "thinking_delta") break;
 
           setItems((current) =>
             current.map((item) => {
-              if (item.kind !== 'message' || item.id !== id) return item;
-              if (messageEvent.type === 'thinking_delta') {
-                return { ...item, reasoning: `${item.reasoning || ''}${delta}` };
+              if (item.kind !== "message" || item.id !== id) return item;
+              if (messageEvent.type === "thinking_delta") {
+                return {
+                  ...item,
+                  reasoning: `${item.reasoning || ""}${delta}`,
+                };
               }
               return { ...item, text: `${item.text}${delta}` };
-            })
+            }),
           );
           break;
         }
 
-        case 'message_end': {
+        case "message_end": {
           const id = streamingIdRef.current;
           if (!id) break;
           const usage = event.message?.usage;
@@ -411,82 +393,84 @@ export function App() {
           setLastUsage(usage || null);
           setItems((current) =>
             current.map((item) =>
-              item.kind === 'message' && item.id === id
+              item.kind === "message" && item.id === id
                 ? {
                     ...item,
                     streaming: false,
                     cost: usage?.cost?.total,
                     ...(finalText !== undefined && { text: finalText }),
-                    ...(finalReasoning !== undefined && { reasoning: finalReasoning }),
+                    ...(finalReasoning !== undefined && {
+                      reasoning: finalReasoning,
+                    }),
                     copyable: !hasToolCalls,
-                    presentation: hasToolCalls ? 'activity' : 'normal',
+                    presentation: hasToolCalls ? "activity" : "normal",
                   }
-                : item
-            )
+                : item,
+            ),
           );
           streamingIdRef.current = null;
           streamingHasToolCallRef.current = false;
           break;
         }
 
-        case 'tool_execution_start':
+        case "tool_execution_start":
           if (!event.toolCallId) break;
           streamingHasToolCallRef.current = true;
           setItems((current) => [
             ...current,
             {
-              kind: 'tool',
+              kind: "tool",
               id: event.toolCallId as string,
-              name: event.toolName || 'tool',
+              name: event.toolName || "tool",
               input: event.args,
-              state: 'input-streaming',
+              state: "input-streaming",
               open: false,
             },
           ]);
           break;
 
-        case 'tool_execution_update':
+        case "tool_execution_update":
           if (!event.toolCallId) break;
           setItems((current) =>
             current.map((item) =>
-              item.kind === 'tool' && item.id === event.toolCallId
+              item.kind === "tool" && item.id === event.toolCallId
                 ? {
                     ...item,
                     output: formatToolOutput(event.partialResult),
-                    state: 'input-available',
+                    state: "input-available",
                   }
-                : item
-            )
+                : item,
+            ),
           );
           break;
 
-        case 'tool_execution_end':
+        case "tool_execution_end":
           if (!event.toolCallId) break;
           setItems((current) =>
             current.map((item) =>
-              item.kind === 'tool' && item.id === event.toolCallId
+              item.kind === "tool" && item.id === event.toolCallId
                 ? {
                     ...item,
                     output: event.isError ? undefined : formatToolOutput(event.result),
                     errorText: event.isError ? String(formatToolOutput(event.result)) : undefined,
-                    state: event.isError ? 'output-error' : 'output-available',
+                    state: event.isError ? "output-error" : "output-available",
                   }
-                : item
-            )
+                : item,
+            ),
           );
           break;
 
-        case 'auto_compaction_start':
-          addSystemMessage('Compacting context...');
+        case "auto_compaction_start":
+          addSystemMessage("Compacting context...");
           break;
 
-        case 'auto_compaction_end':
-          addSystemMessage(`Context compacted${event.summary ? `: ${event.summary}` : ''}`, 'success');
+        case "auto_compaction_end":
+          addSystemMessage(`Context compacted${event.summary ? `: ${event.summary}` : ""}`, "success");
           setLastUsage(null);
           setContextOpen(false);
           break;
 
-        case 'extension_ui_request':
+        case "extension_ui_request":
           if (event.id && event.method) {
             setDialog({
               id: event.id,
@@ -501,19 +485,19 @@ export function App() {
           }
           break;
 
-        case 'extension_error':
-          addSystemMessage(`Extension error: ${event.error || 'Unknown error'}`, 'error');
+        case "extension_error":
+          addSystemMessage(`Extension error: ${event.error || "Unknown error"}`, "error");
           break;
 
-        case 'session_name':
+        case "session_name":
           if (event.name) setSessionName(event.name);
           break;
 
-        case 'auth_changed':
+        case "auth_changed":
           setAuthEnabled(Boolean(event.enabled));
           break;
 
-        case 'model_select':
+        case "model_select":
           if (event.model) {
             setCurrentModel(event.model);
             setModelLabel(shortModelName(event.model.id));
@@ -525,33 +509,33 @@ export function App() {
           break;
       }
     },
-    [addSystemMessage, nextId]
+    [addSystemMessage, nextId],
   );
 
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
     const listener = () => setSystemDark(media.matches);
-    media.addEventListener('change', listener);
-    return () => media.removeEventListener('change', listener);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('tau-theme-mode', themeMode);
-    document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+    localStorage.setItem("tau-theme-mode", themeMode);
+    document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
     document.documentElement.style.colorScheme = resolvedTheme;
   }, [resolvedTheme, themeMode]);
 
   useEffect(() => {
-    localStorage.setItem('tau-show-thinking', String(showThinking));
+    localStorage.setItem("tau-show-thinking", String(showThinking));
   }, [showThinking]);
 
   useEffect(() => {
-    localStorage.setItem('tau-favourites', JSON.stringify(favourites));
+    localStorage.setItem("tau-favourites", JSON.stringify(favourites));
   }, [favourites]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator && import.meta.env.PROD) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    if ("serviceWorker" in navigator && import.meta.env.PROD) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
   }, []);
 
@@ -567,7 +551,7 @@ export function App() {
   }, [fetchHealth, loadInstances, loadSessions, refreshState]);
 
   useEffect(() => {
-    if (view === 'projects') loadProjects();
+    if (view === "projects") loadProjects();
   }, [loadProjects, view]);
 
   useEffect(() => {
@@ -584,7 +568,7 @@ export function App() {
         const data = await response.json();
         setSearchResults(data.results || []);
       } catch (err) {
-        if (!controller.signal.aborted) console.error('[Tau] search failed', err);
+        if (!controller.signal.aborted) console.error("[Tau] search failed", err);
       }
     }, 300);
 
@@ -598,39 +582,42 @@ export function App() {
     let intentionallyClosed = false;
 
     const connect = () => {
-      setConnection('connecting');
+      setConnection("connecting");
       const ws = new WebSocket(wsUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {
-        setConnection('connected');
+        setConnection("connected");
         setError(null);
         fetchHealth();
       };
 
       ws.onmessage = (messageEvent) => {
         try {
-          const data = JSON.parse(messageEvent.data) as { type?: string; [key: string]: unknown };
-          if (data.type === 'mirror_sync') {
+          const data = JSON.parse(messageEvent.data) as {
+            type?: string;
+            [key: string]: unknown;
+          };
+          if (data.type === "mirror_sync") {
             applySync(data as MirrorSync);
-          } else if (data.type === 'event') {
+          } else if (data.type === "event") {
             handleEvent(data.event as RpcEvent);
-          } else if (data.type === 'error') {
-            setError(String(data.message || 'Server error'));
-          } else if (data.type === 'session_switch') {
-            sendWs({ type: 'mirror_sync_request' });
-          } else if (data.type !== 'response' && data.type !== 'state') {
+          } else if (data.type === "error") {
+            setError(String(data.message || "Server error"));
+          } else if (data.type === "session_switch") {
+            sendWs({ type: "mirror_sync_request" });
+          } else if (data.type !== "response" && data.type !== "state") {
             handleEvent(data as unknown as RpcEvent);
           }
         } catch (err) {
-          console.error('[Tau] Failed to parse WebSocket message', err);
+          console.error("[Tau] Failed to parse WebSocket message", err);
         }
       };
 
-      ws.onerror = () => setError('WebSocket error');
+      ws.onerror = () => setError("WebSocket error");
 
       ws.onclose = () => {
-        setConnection('disconnected');
+        setConnection("disconnected");
         wsRef.current = null;
         if (!intentionallyClosed) {
           reconnectTimerRef.current = window.setTimeout(connect, 1200);
@@ -653,22 +640,22 @@ export function App() {
       document.title = originalTitleRef.current;
     };
     const onVisibility = () => {
-      if (document.visibilityState === 'visible' && wsRef.current?.readyState !== WebSocket.OPEN) {
+      if (document.visibilityState === "visible" && wsRef.current?.readyState !== WebSocket.OPEN) {
         wsRef.current?.close();
       }
     };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
   const sendPrompt = useCallback(
     async (command: PromptCommand, optimistic = true) => {
       if (!viewingActiveSession) {
-        setError('Viewing historical session. Switch back to the live session to send messages.');
+        setError("Viewing historical session. Switch back to the live session to send messages.");
         return;
       }
 
@@ -677,20 +664,20 @@ export function App() {
         setItems((current) => [
           ...current,
           {
-            kind: 'message',
-            id: nextId('user'),
-            role: 'user',
+            kind: "message",
+            id: nextId("user"),
+            role: "user",
             text: command.message,
             images: command.images,
           },
         ]);
       }
-      setChatStatus('submitted');
+      setChatStatus("submitted");
       setError(null);
 
       try {
         const payload = {
-          type: 'prompt',
+          type: "prompt",
           message: command.message,
           images: command.images,
         };
@@ -698,15 +685,15 @@ export function App() {
           await rpc(payload);
         }
       } catch (err) {
-        setChatStatus('error');
-        setError(err instanceof Error ? err.message : 'Prompt failed');
+        setChatStatus("error");
+        setError(err instanceof Error ? err.message : "Prompt failed");
       }
     },
-    [nextId, rpc, sendWs, viewingActiveSession]
+    [nextId, rpc, sendWs, viewingActiveSession],
   );
 
   useEffect(() => {
-    if (chatStatus !== 'ready' || queuedMessages.length === 0 || !viewingActiveSession) return;
+    if (chatStatus !== "ready" || queuedMessages.length === 0 || !viewingActiveSession) return;
     const [next, ...rest] = queuedMessages;
     setQueuedMessages(rest);
     sendPrompt(next);
@@ -719,38 +706,39 @@ export function App() {
       if (!trimmed && images.length === 0) return;
 
       const command: PromptCommand = {
-        message: trimmed || '(see attached image)',
+        id: nextId("prompt"),
+        message: trimmed || "(see attached image)",
         images: images.length ? images : undefined,
       };
 
-      if (chatStatus === 'streaming' || chatStatus === 'submitted') {
+      if (chatStatus === "streaming" || chatStatus === "submitted") {
         setQueuedMessages((current) => [...current, command]);
         return;
       }
 
       await sendPrompt(command);
     },
-    [chatStatus, sendPrompt]
+    [chatStatus, nextId, sendPrompt],
   );
 
   const abort = useCallback(async () => {
     try {
-      if (!sendWs({ type: 'abort' })) {
-        await rpc({ type: 'abort' });
+      if (!sendWs({ type: "abort" })) {
+        await rpc({ type: "abort" });
       }
-      setChatStatus('ready');
-      addSystemMessage('Aborted by user', 'error');
+      setChatStatus("ready");
+      addSystemMessage("Aborted by user", "error");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Abort failed');
+      setError(err instanceof Error ? err.message : "Abort failed");
     }
   }, [addSystemMessage, rpc, sendWs]);
 
   const cycleThinking = useCallback(async () => {
     try {
-      const result = await rpc({ type: 'cycle_thinking_level' });
-      setThinkingLevel(result.data?.level || result.data?.thinkingLevel || 'off');
+      const result = await rpc({ type: "cycle_thinking_level" });
+      setThinkingLevel(result.data?.level || result.data?.thinkingLevel || "off");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to change thinking level');
+      setError(err instanceof Error ? err.message : "Failed to change thinking level");
     }
   }, [rpc]);
 
@@ -762,16 +750,20 @@ export function App() {
   const selectModel = useCallback(
     async (model: ModelInfo) => {
       try {
-        await rpc({ type: 'set_model', provider: model.provider, modelId: model.id });
+        await rpc({
+          type: "set_model",
+          provider: model.provider,
+          modelId: model.id,
+        });
         setCurrentModel(model);
         setModelLabel(shortModelName(model.id));
         if (model.contextWindow) setContextWindowSize(model.contextWindow);
         setModelOpen(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to switch model');
+        setError(err instanceof Error ? err.message : "Failed to switch model");
       }
     },
-    [rpc]
+    [rpc],
   );
 
   const selectSession = useCallback(
@@ -780,7 +772,7 @@ export function App() {
       setError(null);
 
       const otherInstance = liveInstances.find(
-        (instance) => instance.sessionFile === session.filePath && instance.port !== Number(location.port || 3001)
+        (instance) => instance.sessionFile === session.filePath && instance.port !== Number(location.port || 3001),
       );
       if (otherInstance) {
         window.location.href = `${location.protocol}//${location.hostname}:${otherInstance.port}${location.pathname}${location.search}${location.hash}`;
@@ -789,12 +781,12 @@ export function App() {
 
       if (session.filePath === liveSessionFile) {
         setViewingActiveSession(true);
-        sendWs({ type: 'mirror_sync_request' });
+        sendWs({ type: "mirror_sync_request" });
         return;
       }
 
       setViewingActiveSession(false);
-      setChatStatus('ready');
+      setChatStatus("ready");
       const dirName = project?.dirName;
       const file = session.file;
       if (!dirName || !file) return;
@@ -806,40 +798,43 @@ export function App() {
         const nextSubagents = subagentsFromEntries(entries);
         setItems(syncToItems(entries, nextId));
         setSubagents(nextSubagents);
-        setSelectedSubagentId((current) => current && nextSubagents[current] ? current : null);
-        setSessionName(session.name || session.firstMessage || 'Session history');
+        setSelectedSubagentId((current) => (current && nextSubagents[current] ? current : null));
+        setSessionName(session.name || session.firstMessage || "Session history");
         setLastUsage(findLastUsage(entries));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load session');
+        setError(err instanceof Error ? err.message : "Failed to load session");
       }
     },
-    [liveInstances, liveSessionFile, nextId, sendWs]
+    [liveInstances, liveSessionFile, nextId, sendWs],
   );
 
   const returnToLive = useCallback(() => {
     setViewingActiveSession(true);
     setActiveSessionFile(liveSessionFile);
-    sendWs({ type: 'mirror_sync_request' });
+    sendWs({ type: "mirror_sync_request" });
   }, [liveSessionFile, sendWs]);
 
-  const launchProject = useCallback(async (projectPath: string) => {
-    try {
-      await fetch('/api/projects/launch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: projectPath }),
-      });
-      addSystemMessage(`Launching ${projectPath}`, 'success');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to launch project');
-    }
-  }, [addSystemMessage]);
+  const launchProject = useCallback(
+    async (projectPath: string) => {
+      try {
+        await fetch("/api/projects/launch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: projectPath }),
+        });
+        addSystemMessage(`Launching ${projectPath}`, "success");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to launch project");
+      }
+    },
+    [addSystemMessage],
+  );
 
   const openSettings = useCallback(async () => {
     setSettingsOpen(true);
     await refreshState();
     try {
-      const result = await rpc({ type: 'get_auth' });
+      const result = await rpc({ type: "get_auth" });
       setAuthConfigured(Boolean(result.data?.configured));
       setAuthEnabled(Boolean(result.data?.enabled));
     } catch {
@@ -849,55 +844,53 @@ export function App() {
 
   const toggleAuth = useCallback(async () => {
     try {
-      const result = await rpc({ type: 'set_auth', enabled: !authEnabled });
+      const result = await rpc({ type: "set_auth", enabled: !authEnabled });
       setAuthEnabled(Boolean(result.data?.enabled));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update auth');
+      setError(err instanceof Error ? err.message : "Failed to update auth");
     }
   }, [authEnabled, rpc]);
 
   const compactContext = useCallback(async () => {
     try {
-      await rpc({ type: 'compact' });
-      addSystemMessage('Compaction requested');
+      await rpc({ type: "compact" });
+      addSystemMessage("Compaction requested");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Compaction failed');
+      setError(err instanceof Error ? err.message : "Compaction failed");
     }
   }, [addSystemMessage, rpc]);
 
   const exportHtml = useCallback(async () => {
     try {
-      const result = await rpc({ type: 'export_html' });
-      if (result.data?.path) addSystemMessage(`Exported: ${result.data.path}`, 'success');
+      const result = await rpc({ type: "export_html" });
+      if (result.data?.path) addSystemMessage(`Exported: ${result.data.path}`, "success");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export failed');
+      setError(err instanceof Error ? err.message : "Export failed");
     }
   }, [addSystemMessage, rpc]);
 
   const showSessionStats = useCallback(async () => {
     try {
-      const result = await rpc({ type: 'get_session_stats' });
+      const result = await rpc({ type: "get_session_stats" });
       const stats = result.data;
       addSystemMessage(
         [
-          'Session stats',
+          "Session stats",
           `Messages: ${stats.totalMessages} (${stats.userMessages} user, ${stats.assistantMessages} assistant)`,
           `Tool calls: ${stats.toolCalls}`,
-          stats.tokens ? `Context: ~${formatTokens(stats.tokens.input || stats.tokens.total || 0)} tokens` : '',
+          stats.tokens ? `Context: ~${formatTokens(stats.tokens.input || stats.tokens.total || 0)} tokens` : "",
         ]
           .filter(Boolean)
-          .join('\n')
+          .join("\n"),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Stats failed');
+      setError(err instanceof Error ? err.message : "Stats failed");
     }
   }, [addSystemMessage, rpc]);
 
   const toggleAllTools = useCallback((open: boolean) => {
     setItems((current) =>
-      current.map((item) =>
-        item.kind === 'tool' && isToolExpandable(item) ? { ...item, open } : item
-      )
+      current.map((item) => (item.kind === "tool" && isToolExpandable(item) ? { ...item, open } : item)),
     );
   }, []);
 
@@ -906,30 +899,30 @@ export function App() {
       const trimmed = name.trim();
       if (!trimmed) return;
       try {
-        await rpc({ type: 'set_session_name', name: trimmed });
+        await rpc({ type: "set_session_name", name: trimmed });
         setSessionName(trimmed);
         setProjects((current) =>
           current.map((project) => ({
             ...project,
             sessions: project.sessions.map((session) =>
-              session.filePath === activeSessionFile ? { ...session, name: trimmed } : session
+              session.filePath === activeSessionFile ? { ...session, name: trimmed } : session,
             ),
-          }))
+          })),
         );
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Rename failed');
+        setError(err instanceof Error ? err.message : "Rename failed");
       }
     },
-    [activeSessionFile, rpc]
+    [activeSessionFile, rpc],
   );
 
   const respondDialog = useCallback(
     (response: Record<string, unknown>) => {
       if (!dialog) return;
-      sendWs({ type: 'extension_ui_response', id: dialog.id, ...response });
+      sendWs({ type: "extension_ui_response", id: dialog.id, ...response });
       setDialog(null);
     },
-    [dialog, sendWs]
+    [dialog, sendWs],
   );
 
   useEffect(() => {
@@ -941,58 +934,83 @@ export function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setCommandOpen(true);
-      } else if (event.key === '/') {
+      } else if (event.key === "/") {
         event.preventDefault();
         document.querySelector<HTMLTextAreaElement>('textarea[name="message"]')?.focus();
-      } else if (event.key === 'Escape') {
+      } else if (event.key === "Escape") {
         if (commandOpen) setCommandOpen(false);
         else if (modelOpen) setModelOpen(false);
         else if (settingsOpen) setSettingsOpen(false);
-        else if (chatStatus === 'streaming') abort();
+        else if (chatStatus === "streaming") abort();
       }
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [abort, chatStatus, commandOpen, modelOpen, settingsOpen]);
 
   const totalCost = useMemo(
-    () =>
-      items.reduce((sum, item) => sum + (item.kind === 'message' ? item.cost || 0 : 0), 0),
-    [items]
+    () => items.reduce((sum, item) => sum + (item.kind === "message" ? item.cost || 0 : 0), 0),
+    [items],
   );
 
   const usedContextTokens = (lastUsage?.input || 0) + (lastUsage?.cacheRead || 0);
-  const contextPercent =
-    contextWindowSize > 0 ? Math.round((usedContextTokens / contextWindowSize) * 100) : 0;
+  const contextPercent = contextWindowSize > 0 ? Math.round((usedContextTokens / contextWindowSize) * 100) : 0;
   const shouldSuggestCompaction = contextPercent >= 80;
   const subagentItems = useMemo(() => subagentList(subagents), [subagents]);
   const selectedSubagent = selectedSubagentId ? subagents[selectedSubagentId] : null;
 
   const commandActions = [
-    { label: 'Compact', desc: 'Compact context to save tokens', icon: ArchiveIcon, action: compactContext },
-    { label: 'Export HTML', desc: 'Export current session as HTML', icon: DownloadIcon, action: exportHtml },
-    { label: 'Session Stats', desc: 'Show message and tool call counts', icon: BarChart3Icon, action: showSessionStats },
-    { label: 'Expand All Tools', desc: 'Open every tool card', icon: PanelLeftOpenIcon, action: () => toggleAllTools(true) },
-    { label: 'Collapse All Tools', desc: 'Close every tool card', icon: PanelLeftCloseIcon, action: () => toggleAllTools(false) },
+    {
+      label: "Compact",
+      desc: "Compact context to save tokens",
+      icon: ArchiveIcon,
+      action: compactContext,
+    },
+    {
+      label: "Export HTML",
+      desc: "Export current session as HTML",
+      icon: DownloadIcon,
+      action: exportHtml,
+    },
+    {
+      label: "Session Stats",
+      desc: "Show message and tool call counts",
+      icon: BarChart3Icon,
+      action: showSessionStats,
+    },
+    {
+      label: "Expand All Tools",
+      desc: "Open every tool card",
+      icon: PanelLeftOpenIcon,
+      action: () => toggleAllTools(true),
+    },
+    {
+      label: "Collapse All Tools",
+      desc: "Close every tool card",
+      icon: PanelLeftCloseIcon,
+      action: () => toggleAllTools(false),
+    },
   ];
 
   return (
     <TooltipProvider>
       <main className="flex h-full min-h-0 bg-background text-foreground">
         {sidebarOpen && (
-          <div
+          <button
+            aria-label="Close sidebar"
             className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm md:hidden"
             onClick={() => setSidebarOpen(false)}
+            type="button"
           />
         )}
 
         <aside
           className={cn(
-            'fixed inset-y-0 left-0 z-40 flex w-80 flex-col border-r bg-background transition-transform md:static md:z-auto',
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full md:hidden'
+            "fixed inset-y-0 left-0 z-40 flex w-80 flex-col border-r bg-background transition-transform md:static md:z-auto",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full md:hidden",
           )}
         >
           <div className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
@@ -1011,21 +1029,21 @@ export function App() {
           <div className="border-b p-3">
             <div className="flex rounded-md bg-muted p-1">
               <button
-                className={cn('flex-1 rounded-sm px-2 py-1 text-sm', view === 'chat' && 'bg-background shadow-xs')}
-                onClick={() => setView('chat')}
+                className={cn("flex-1 rounded-sm px-2 py-1 text-sm", view === "chat" && "bg-background shadow-xs")}
+                onClick={() => setView("chat")}
                 type="button"
               >
                 Sessions
               </button>
               <button
-                className={cn('flex-1 rounded-sm px-2 py-1 text-sm', view === 'projects' && 'bg-background shadow-xs')}
-                onClick={() => setView('projects')}
+                className={cn("flex-1 rounded-sm px-2 py-1 text-sm", view === "projects" && "bg-background shadow-xs")}
+                onClick={() => setView("projects")}
                 type="button"
               >
                 Projects
               </button>
             </div>
-            {view === 'chat' && (
+            {view === "chat" && (
               <div className="relative mt-3">
                 <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
                 <Input
@@ -1039,23 +1057,25 @@ export function App() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {view === 'chat' ? (
+            {view === "chat" ? (
               <SessionSidebar
                 activeSessionFile={activeSessionFile}
                 collapsedProjects={collapsedProjects}
                 favourites={favourites}
-                liveFiles={new Set([liveSessionFile, ...liveInstances.map((instance) => instance.sessionFile)].filter(Boolean) as string[])}
+                liveFiles={
+                  new Set(
+                    [liveSessionFile, ...liveInstances.map((instance) => instance.sessionFile)].filter(
+                      Boolean,
+                    ) as string[],
+                  )
+                }
                 loading={sessionsLoading}
                 onRename={renameActiveSession}
                 onSelect={selectSession}
-                onToggleCollapsed={(dirName) =>
-                  setCollapsedProjects((current) => toggleSetValue(current, dirName))
-                }
+                onToggleCollapsed={(dirName) => setCollapsedProjects((current) => toggleSetValue(current, dirName))}
                 onToggleFavourite={(filePath) =>
                   setFavourites((current) =>
-                    current.includes(filePath)
-                      ? current.filter((item) => item !== filePath)
-                      : [...current, filePath]
+                    current.includes(filePath) ? current.filter((item) => item !== filePath) : [...current, filePath],
                   )
                 }
                 projects={projects}
@@ -1063,21 +1083,12 @@ export function App() {
                 searchResults={searchResults}
               />
             ) : (
-              <ProjectLauncher
-                loading={launcherLoading}
-                onLaunch={launchProject}
-                projects={launcherProjects}
-              />
+              <ProjectLauncher loading={launcherLoading} onLaunch={launchProject} projects={launcherProjects} />
             )}
           </div>
 
           <div className="shrink-0 border-t p-2">
-            <Button
-              className="w-full justify-start gap-2"
-              onClick={openSettings}
-              type="button"
-              variant="ghost"
-            >
+            <Button className="w-full justify-start gap-2" onClick={openSettings} type="button" variant="ghost">
               <Settings2Icon className="size-4" />
               <span>Settings</span>
             </Button>
@@ -1094,7 +1105,10 @@ export function App() {
                 <div className="truncate font-medium text-sm">{sessionName}</div>
                 <div className="flex items-center gap-2 text-muted-foreground text-xs">
                   <ConnectionDot state={connection} />
-                  <span>{connection}{tailscaleUrl ? ' / TS' : ''}</span>
+                  <span>
+                    {connection}
+                    {tailscaleUrl ? " / TS" : ""}
+                  </span>
                   <span>/</span>
                   <span>{modelLabel}</span>
                   {!viewingActiveSession && <span className="text-amber-600">history</span>}
@@ -1118,9 +1132,7 @@ export function App() {
               </Button>
               {contextWindowSize > 0 && (
                 <Button
-                  className={cn(
-                    shouldSuggestCompaction && 'border-amber-500 text-amber-600'
-                  )}
+                  className={cn(shouldSuggestCompaction && "border-amber-500 text-amber-600")}
                   onClick={() => setContextOpen((open) => !open)}
                   size="sm"
                   type="button"
@@ -1163,10 +1175,8 @@ export function App() {
                       onToggleTool={(id, open) =>
                         setItems((current) =>
                           current.map((candidate) =>
-                            candidate.kind === 'tool' && candidate.id === id
-                              ? { ...candidate, open }
-                              : candidate
-                          )
+                            candidate.kind === "tool" && candidate.id === id ? { ...candidate, open } : candidate,
+                          ),
                         )
                       }
                       showThinking={showThinking}
@@ -1185,21 +1195,23 @@ export function App() {
               />
             )}
             {!selectedSubagent && !contextOpen && (
-              <WorkspaceStatusFloat
-                onOpenSubagent={setSelectedSubagentId}
-                subagents={subagentItems}
-              />
+              <WorkspaceStatusFloat onOpenSubagent={setSelectedSubagentId} subagents={subagentItems} />
             )}
           </div>
 
           {queuedMessages.length > 0 && (
             <div className="mx-auto w-full max-w-3xl px-4 pt-2">
               <div className="flex flex-wrap gap-2">
-                {queuedMessages.map((queued, index) => (
-                  <div className="flex items-center gap-2 rounded-md border bg-muted px-2 py-1 text-xs" key={`${queued.message}-${index}`}>
+                {queuedMessages.map((queued) => (
+                  <div className="flex items-center gap-2 rounded-md border bg-muted px-2 py-1 text-xs" key={queued.id}>
                     <span className="text-muted-foreground">Queued</span>
                     <span className="max-w-72 truncate">{queued.message}</span>
-                    <button onClick={() => setQueuedMessages((current) => current.filter((_, i) => i !== index))} type="button">
+                    <button
+                      onClick={() =>
+                        setQueuedMessages((current) => current.filter((candidate) => candidate.id !== queued.id))
+                      }
+                      type="button"
+                    >
                       <XIcon className="size-3" />
                     </button>
                   </div>
@@ -1220,7 +1232,7 @@ export function App() {
             <div className="mx-auto w-full max-w-3xl">
               <PromptInput
                 accept="image/*"
-                className={cn('rounded-xl border bg-card shadow-sm', !viewingActiveSession && 'opacity-70')}
+                className={cn("rounded-xl border bg-card shadow-sm", !viewingActiveSession && "opacity-70")}
                 globalDrop={viewingActiveSession}
                 multiple
                 onSubmit={submitMessage}
@@ -1230,7 +1242,7 @@ export function App() {
                   <PromptInputTextarea
                     className="min-h-20 resize-none"
                     disabled={!viewingActiveSession}
-                    placeholder={viewingActiveSession ? 'Message Pi...' : 'Viewing historical session'}
+                    placeholder={viewingActiveSession ? "Message Pi..." : "Viewing historical session"}
                   />
                 </PromptInputBody>
                 <PromptInputFooter>
@@ -1248,10 +1260,7 @@ export function App() {
         </div>
 
         {selectedSubagent && (
-          <SubagentDetailSidebar
-            agent={selectedSubagent}
-            onClose={() => setSelectedSubagentId(null)}
-          />
+          <SubagentDetailSidebar agent={selectedSubagent} onClose={() => setSelectedSubagentId(null)} />
         )}
 
         {modelOpen && (
@@ -1273,11 +1282,11 @@ export function App() {
             onRenameSession={renameActiveSession}
             onSetAutoCompaction={async (enabled) => {
               setAutoCompaction(enabled);
-              await rpc({ type: 'set_auto_compaction', enabled });
+              await rpc({ type: "set_auto_compaction", enabled });
             }}
             onSetTheme={setThemeMode}
             onSetThinking={async (level) => {
-              await rpc({ type: 'set_thinking_level', level });
+              await rpc({ type: "set_thinking_level", level });
               setThinkingLevel(level);
             }}
             onToggleAuth={toggleAuth}
@@ -1288,12 +1297,7 @@ export function App() {
             thinkingLevel={thinkingLevel}
           />
         )}
-        {commandOpen && (
-          <CommandPalette
-            commands={commandActions}
-            onClose={() => setCommandOpen(false)}
-          />
-        )}
+        {commandOpen && <CommandPalette commands={commandActions} onClose={() => setCommandOpen(false)} />}
         {dialog && (
           <ExtensionDialogView
             dialog={dialog}
