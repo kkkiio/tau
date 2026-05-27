@@ -13,9 +13,9 @@ mode and an optional right detail column:
 [Navigation Sidebar] | [Chat Workspace] | [Detail Sidebar]
 ```
 
-The chat remains the primary work surface. The right detail sidebar is used only
-when the user is inspecting important secondary information such as a sub-agent
-result, environment detail, source, or future artifact.
+The chat remains the primary work surface. The right detail sidebar is used when
+the user is inspecting important secondary information such as a sub-agent
+result or future artifact.
 
 ## Modes
 
@@ -70,17 +70,15 @@ Rules:
 ## Right Detail Sidebar
 
 The right detail sidebar is feature-specific. It is not a generic context-item
-renderer.
+renderer. Each feature owns its detail content rules in its own spec.
 
 Initial supported detail:
 
-- `subagent`: one Pi sub-agent's status, result, and metadata.
+- `subagent`: defined in `specs/subagent-integration.md`.
 
-Likely future details:
+Likely future detail:
 
-- `environment`: project/session/environment details.
-- `source`: source or reference details.
-- `artifact`: generated file, report, or preview.
+- `artifact`: generated file, report, plan, or preview.
 
 Common sidebar rules:
 
@@ -96,21 +94,6 @@ Common sidebar rules:
 - The sidebar should keep a reasonable minimum width for metadata and a
   reasonable maximum width so the chat column remains usable.
 
-## Sub-Agent Detail Rules
-
-When the selected detail is a sub-agent, the sidebar should show:
-
-- Agent type and description.
-- Lifecycle status.
-- Tool count, duration, token totals, and compaction count when available.
-- Final LLM response rendered as Markdown, when available.
-- Error message for failed, stopped, or aborted states.
-- Transcript or output file path if available.
-
-The sidebar is the correct place for final sub-agent output. The status float
-should show only compact sub-agent rows and should open this detail view when
-the user selects a row with a final result or error.
-
 ## Visual Direction
 
 - Keep the layout quiet, dense, and operational.
@@ -123,12 +106,4 @@ the user selects a row with a final result or error.
 
 - Do not introduce a generic context-item abstraction for the right sidebar.
 - Do not expose raw event JSON as a user-facing detail view.
-- Do not add manual sub-agent spawning controls as part of this layout change.
 - Do not replace existing session, model, or settings controls.
-
-## Open Questions
-
-- Should the float reappear automatically after closing the sidebar, or only
-  when the user explicitly reopens it?
-- Should very large sub-agent results be displayed inline, linked to transcript
-  files, or both?

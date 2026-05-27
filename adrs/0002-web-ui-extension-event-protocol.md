@@ -32,9 +32,8 @@ For WebSocket delivery, Tau will preserve:
 - The original event payload, unchanged except for JSON serialization.
 - The ordering in which Mirror Server observes events.
 
-The browser-side app owns feature-specific interpretation. For example, the
-sub-agent UI should consume `subagents:*` events directly and decide how those
-events affect the floating status card and right detail sidebar.
+The browser-side app owns feature-specific interpretation. For example,
+sub-agent display rules live in `specs/subagent-integration.md`.
 
 ## Transport Shape
 
@@ -146,31 +145,18 @@ Mirror Server subscribes to `tau:web:event` once and forwards it as:
 This is optional. It keeps Mirror Server subscription code smaller, but the
 extension must opt into the shared channel convention.
 
-## pi-subagents Events
+## pi-subagents Data Sources
 
-For the current `pi-subagents` package, Mirror Server should forward these
-channels unchanged:
+For the current `pi-subagents` package, Mirror Server may forward known
+`subagents:*` channels unchanged. The Web UI should also learn from Pi session
+entries:
 
-| Channel | Why Web UI needs it |
-|---|---|
-| `subagents:ready` | Show that the sub-agent extension is active. |
-| `subagents:created` | Add a sub-agent row in queued/background state. |
-| `subagents:started` | Mark the sub-agent running. |
-| `subagents:completed` | Mark the sub-agent complete and display result. |
-| `subagents:failed` | Mark the sub-agent failed/stopped/aborted and display error/partial result. |
-| `subagents:steered` | Record that a steering message was sent. |
-| `subagents:compacted` | Show compaction metadata for the sub-agent. |
-| `subagents:scheduled` | Reflect scheduled sub-agent job lifecycle. |
-| `subagents:scheduler_ready` | Show scheduler availability/status if needed. |
-| `subagents:settings_loaded` | Optional diagnostics/settings visibility. |
-| `subagents:settings_changed` | Optional diagnostics/settings visibility. |
-
-The Web UI should also learn from Pi session entries:
-
-- `custom_message` with `customType: "subagent-notification"` contains
+- `subagents:*` extension events for live lifecycle updates.
+- Pi `Agent` tool execution events for foreground tool results.
+- `custom_message` entries with `customType: "subagent-notification"` for
   background/group completion display details.
-- `custom` with `customType: "subagents:record"` contains persisted completed
-  agent records for reconstruction.
+- `custom` entries with `customType: "subagents:record"` for persisted completed
+  agent reconstruction.
 
 These are not `pi.events` events. They should be handled from `mirror_sync`
 entries and from normal message lifecycle events if Pi emits custom messages
@@ -188,6 +174,9 @@ provide the temporary row and matching `toolResult` messages provide terminal
 status, final response, metrics, and stable `details.agentId` when present. This
 keeps Mirror Server in a transport role while still making foreground sub-agent
 rows recoverable without replaying live events.
+
+The UI behavior for these sources is specified in
+`specs/subagent-integration.md`.
 
 ## Recommended Extension Event Design
 
@@ -225,18 +214,6 @@ Example lifecycle:
   "durationMs": 12300
 }
 ```
-
-## Web UI Responsibility
-
-The Web UI owns feature reducers and display models.
-
-For `pi-subagents`, the Web UI should maintain a `subagentsById` state map keyed
-by `payload.id`, then render:
-
-- A row in the workspace status float.
-- A detail view in the right sidebar when selected.
-
-This state is not a generic protocol type. It is a sub-agent feature model.
 
 ## Alternatives Considered
 

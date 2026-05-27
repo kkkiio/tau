@@ -10,7 +10,8 @@ Add a Codex-style upper-right floating status card for the classic two-column
 chat workspace. The float gives compact situational awareness without moving the
 main chat.
 
-The current version shows only `Subagents`. The component name remains
+The current version shows only `Subagents`, defined in
+`specs/subagent-integration.md`. The component name remains
 `WorkspaceStatusFloat` because this surface may later also host Artifacts, such
 as plans or other important intermediate results.
 
@@ -50,49 +51,15 @@ Mobile:
 ## Visibility
 
 In desktop two-column mode, the float is shown by default. If there are no
-sub-agents yet, it should show a compact empty state instead of disappearing.
+supported items yet, it should show a compact empty state instead of
+disappearing.
 
 ## Sections
 
 ### Subagents
 
-Shows running or completed Pi sub-agents, including foreground, background, and
-scheduled agents when Tau has enough information to identify them.
-
-Each row should communicate:
-
-- Status.
-- Agent type.
-- Short description.
-- Compact metric, result preview, or error preview when available.
-
-Clicking a sub-agent row:
-
-1. Selects that sub-agent.
-2. Opens the right detail sidebar.
-3. Hides the float because the workspace is now in three-column mode.
-
-The float should not render long sub-agent results. Final output belongs in the
-right detail sidebar.
-
-### Refresh, Reconnect, and History Loading
-
-The Web UI should rebuild foreground sub-agent rows from session history after a
-page refresh or when the user opens a saved session from the left sidebar.
-
-Rules:
-
-- Foreground Pi `Agent` tool calls should appear in the float after refresh.
-- Foreground Pi `Agent` tool calls should also appear when viewing a historical
-  session, even when no live `subagents:*` extension events are replayed.
-- A historical assistant `Agent` tool call provides the queued/running row
-  metadata, such as description and sub-agent type.
-- The matching historical `toolResult` provides the terminal status, final
-  response, tool count, duration, and stable agent id when available.
-- If an `Agent` tool call exists without a matching result yet, the row should
-  be shown as running using the tool call id as a temporary id.
-- Background and scheduled sub-agents can only be restored after refresh when
-  their extension writes durable session entries or sends a snapshot event.
+Shows compact Pi sub-agent activity. Row content, click behavior, and refresh
+recovery rules live in `specs/subagent-integration.md`.
 
 ### Future Artifacts
 
@@ -113,10 +80,10 @@ The float or its trigger may show attention state.
 
 Suggested rules:
 
-- Running or queued sub-agents count as active.
-- Failed, stopped, aborted, and completed sub-agents can request attention until
+- Running or queued items count as active.
+- Failed, stopped, aborted, and completed items can request attention until
   opened.
-- If an already-opened sub-agent receives new information later, it can request
+- If an already-opened item receives new information later, it can request
   attention again.
 - Acknowledgement is a UI behavior; it should not change the underlying
   sub-agent result.
