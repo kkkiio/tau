@@ -422,14 +422,14 @@ export default function (pi: ExtensionAPI) {
   let tailscaleUrl = "";
   let mirrorStatusBase = "";
 
-  function updateMirrorStatus(ctx: ExtensionContext) {
+  function updateMirrorStatus() {
     if (!mirrorStatusBase) {
-      ctx.ui.setStatus("mirror", "");
+      latestCtx?.ui.setStatus("mirror", "");
       return;
     }
     const clientCount = clients.size;
     const clientText = clientCount > 0 ? ` • ${clientCount} web ${clientCount === 1 ? "client" : "clients"}` : "";
-    ctx.ui.setStatus("mirror", `${mirrorStatusBase}${clientText}`);
+    latestCtx?.ui.setStatus("mirror", `${mirrorStatusBase}${clientText}`);
   }
 
   // ═══════════════════════════════════════
@@ -1887,7 +1887,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
     wss.on("connection", (ws) => {
       clients.add(ws);
-      updateMirrorStatus(ctx);
+      updateMirrorStatus();
       const aliveWs = ws as AliveWebSocket;
       aliveWs.isAlive = true;
 
@@ -1916,12 +1916,12 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
 
       ws.on("close", () => {
         clients.delete(ws);
-        updateMirrorStatus(ctx);
+        updateMirrorStatus();
       });
 
       ws.on("error", () => {
         clients.delete(ws);
-        updateMirrorStatus(ctx);
+        updateMirrorStatus();
       });
     });
 
@@ -1950,7 +1950,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
           client.ping();
         } catch {}
       }
-      if (changed) updateMirrorStatus(ctx);
+      if (changed) updateMirrorStatus();
     }, 20000);
 
     const tryListen = (port: number, maxAttempts = 10) => {
@@ -2021,7 +2021,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       mirrorUrl = `http://${localIp}:${port}`;
       tailscaleUrl = tailscaleIp ? `http://${tailscaleIp}:${port}` : "";
       mirrorStatusBase = `Mirror: ${localIp}:${port}${tailscaleIp ? ` • TS: ${tailscaleIp}:${port}` : ""}`;
-      updateMirrorStatus(ctx);
+      updateMirrorStatus();
 
       // Register this instance
       const sessionFile = ctx.sessionManager.getSessionFile() || "";
