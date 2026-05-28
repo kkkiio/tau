@@ -40,6 +40,8 @@ export type ChatItem =
       presentation?: "normal" | "activity";
       cost?: number;
       images?: PromptImage[];
+      /** Session entry tree node ID, used for edit (navigate_tree). */
+      entryId?: string;
     }
   | {
       kind: "tool";

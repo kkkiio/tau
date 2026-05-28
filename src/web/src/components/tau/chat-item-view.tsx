@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 
 import { formatToolSummary, isToolExpandable } from "../../tau/tool-summary";
 import type { ChatItem } from "../../tau/types";
-import { ImagePreviewStrip } from "./image-preview-strip";
 
 export function ChatItemView({
   item,
@@ -69,6 +68,7 @@ export function ChatItemView({
     );
   }
 
+  // item.kind === "message" and role is "assistant" (user messages handled by UserMessageView)
   const canCopy = item.text.trim().length > 0 && item.copyable !== false && !item.streaming;
   const isActivity = item.presentation === "activity";
 
@@ -83,12 +83,11 @@ export function ChatItemView({
     <Message className={cn(isActivity && "gap-1")} from={item.role}>
       <MessageContent
         className={cn(
-          item.role === "assistant" && "w-full",
-          isActivity && item.role === "assistant" && "gap-1 text-muted-foreground",
+          "w-full",
+          isActivity && "gap-1 text-muted-foreground",
           item.streaming && 'after:ml-1 after:animate-pulse after:content-["▋"]',
         )}
       >
-        {item.images && <ImagePreviewStrip images={item.images} readonly />}
         {showThinking && item.reasoning && (
           <Reasoning className={cn(isActivity && "mb-1")} isStreaming={Boolean(item.streaming)}>
             <ReasoningTrigger className={cn(isActivity && "text-xs")} />
@@ -102,12 +101,7 @@ export function ChatItemView({
         </MessageResponse>
       </MessageContent>
       {canCopy && (
-        <MessageActions
-          className={cn(
-            "opacity-0 transition-opacity group-hover:opacity-100",
-            item.role === "user" ? "self-end" : "self-start",
-          )}
-        >
+        <MessageActions className="self-start opacity-0 transition-opacity group-hover:opacity-100">
           <MessageAction label="Copy message" onClick={copyMessage} tooltip="Copy">
             {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
           </MessageAction>

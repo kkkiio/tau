@@ -2,7 +2,7 @@ import { MAX_IMAGE_DIM, VALID_IMAGE_MIME_TYPES } from "./constants";
 import type { ChatItem, PiMessage, PromptImage, Usage } from "./types";
 
 export function syncToItems(
-  entries: Array<{ type: string; message?: PiMessage }>,
+  entries: Array<{ type: string; id?: string; message?: PiMessage }>,
   nextId: (prefix: string) => string,
 ): ChatItem[] {
   const items: ChatItem[] = [];
@@ -22,6 +22,7 @@ export function syncToItems(
           role: "user",
           text,
           images,
+          entryId: entry.id,
         });
       }
     } else if (message.role === "assistant") {

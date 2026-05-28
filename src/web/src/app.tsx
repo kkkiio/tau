@@ -47,6 +47,7 @@ import {
   SessionSidebar,
   SettingsPanel,
   SubagentDetailSidebar,
+  UserMessageView,
   WorkspaceStatusFloat,
 } from "./components/tau";
 import {
@@ -92,6 +93,7 @@ export function App() {
   const [sessionName, setSessionName] = useState("Tau");
   const [error, setError] = useState<string | null>(null);
   const [tailscaleUrl, setTailscaleUrl] = useState("");
+  const [advancedFeatures, setAdvancedFeatures] = useState(false);
 
   const [themeMode, setThemeMode] = useState<ThemeMode>(
     () => (localStorage.getItem("tau-theme-mode") as ThemeMode | null) || "system",
@@ -604,9 +606,12 @@ export function App() {
             handleEvent(data.event as RpcEvent);
           } else if (data.type === "error") {
             setError(String(data.message || "Server error"));
-          } else if (data.type === "session_switch") {
-            sendWs({ type: "mirror_sync_request" });
-          } else if (data.type !== "response" && data.type !== "state") {
+          } else if (data.type === "state") {
+            const s = data as { advancedFeatures?: boolean };
+            if (typeof s.advancedFeatures === "boolean") {
+              setAdvancedFeatures(s.advancedFeatures);
+            }
+          } else if (data.type !== "response") {
             handleEvent(data as unknown as RpcEvent);
           }
         } catch (err) {
@@ -632,7 +637,7 @@ export function App() {
       if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
     };
-  }, [applySync, fetchHealth, handleEvent, sendWs]);
+  }, [applySync, fetchHealth, handleEvent]);
 
   useEffect(() => {
     const onFocus = () => {
@@ -698,6 +703,19 @@ export function App() {
     setQueuedMessages(rest);
     sendPrompt(next);
   }, [chatStatus, queuedMessages, sendPrompt, viewingActiveSession]);
+
+  const handleEditSubmit = useCallback(
+    async (entryId: string, newText: string) => {
+      // Step 1: navigate tree
+      const navResult = await rpc({ type: "navigate_tree", entryId });
+      if (!navResult.success) {
+        throw new Error(navResult.error || "Navigation failed");
+      }
+      // Step 2: send edited prompt
+      await rpc({ type: "prompt", message: newText });
+    },
+    [rpc],
+  );
 
   const submitMessage = useCallback(
     async ({ text, files }: { text: string; files?: unknown[] }) => {
@@ -1167,21 +1185,30 @@ export function App() {
                     title="Tau"
                   />
                 ) : (
-                  items.map((item) => (
-                    <ChatItemView
-                      item={item}
-                      key={item.id}
-                      onCopy={(text) => copyText(text)}
-                      onToggleTool={(id, open) =>
-                        setItems((current) =>
-                          current.map((candidate) =>
-                            candidate.kind === "tool" && candidate.id === id ? { ...candidate, open } : candidate,
-                          ),
-                        )
-                      }
-                      showThinking={showThinking}
-                    />
-                  ))
+                  items.map((item) =>
+                    item.kind === "message" && item.role === "user" ? (
+                      <UserMessageView
+                        item={item as typeof item & { kind: "message"; role: "user" }}
+                        key={item.id}
+                        onCopy={(text) => copyText(text)}
+                        onEdit={advancedFeatures && item.entryId ? handleEditSubmit : undefined}
+                      />
+                    ) : (
+                      <ChatItemView
+                        item={item}
+                        key={item.id}
+                        onCopy={(text) => copyText(text)}
+                        onToggleTool={(id, open) =>
+                          setItems((current) =>
+                            current.map((candidate) =>
+                              candidate.kind === "tool" && candidate.id === id ? { ...candidate, open } : candidate,
+                            ),
+                          )
+                        }
+                        showThinking={showThinking}
+                      />
+                    ),
+                  )
                 )}
               </ConversationContent>
               <ConversationScrollButton />
