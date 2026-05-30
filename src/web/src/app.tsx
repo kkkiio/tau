@@ -141,7 +141,6 @@ export function App() {
   const reconnectTimerRef = useRef<number | null>(null);
   const streamingIdRef = useRef<string | null>(null);
   const streamingHasToolCallRef = useRef(false);
-  const lastSentRef = useRef<string | null>(null);
   const itemCounterRef = useRef(0);
   const unreadCountRef = useRef(0);
   const originalTitleRef = useRef(document.title);
@@ -332,10 +331,6 @@ export function App() {
           } else if (event.message?.role === "user") {
             const text = extractText(event.message.content);
             if (!text) break;
-            if (lastSentRef.current === text) {
-              lastSentRef.current = null;
-              break;
-            }
             setItems((current) => [
               ...current,
               {
@@ -600,6 +595,13 @@ export function App() {
           };
           if (data.type === "mirror_sync") {
             applySync(data as MirrorSync);
+          } else if (data.type === "response") {
+            if (data.success && data.command === "prompt") {
+              setChatStatus((current) => {
+                if (current === "submitted") return "ready";
+                return current;
+              });
+            }
           } else if (data.type === "event") {
             handleEvent(data.event as RpcEvent);
           } else if (data.type === "error") {
@@ -653,25 +655,12 @@ export function App() {
   }, []);
 
   const sendPrompt = useCallback(
-    async (command: PromptCommand, optimistic = true) => {
+    async (command: PromptCommand) => {
       if (!viewingActiveSession) {
         setError("Viewing historical session. Switch back to the live session to send messages.");
         return;
       }
 
-      lastSentRef.current = command.message;
-      if (optimistic) {
-        setItems((current) => [
-          ...current,
-          {
-            kind: "message",
-            id: nextId("user"),
-            role: "user",
-            text: command.message,
-            images: command.images,
-          },
-        ]);
-      }
       setChatStatus("submitted");
       setError(null);
 
@@ -689,7 +678,7 @@ export function App() {
         setError(err instanceof Error ? err.message : "Prompt failed");
       }
     },
-    [nextId, rpc, sendWs, viewingActiveSession],
+    [rpc, sendWs, viewingActiveSession],
   );
 
   useEffect(() => {

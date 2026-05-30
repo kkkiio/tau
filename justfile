@@ -5,3 +5,6 @@ fmt:
 
 check:
     npm run check
+
+build:
+    npm run build:web
