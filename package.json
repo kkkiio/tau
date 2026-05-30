@@ -47,7 +47,6 @@
     "lucide-react": "^1.16.0",
     "motion": "^12.40.0",
     "nanoid": "^5.1.11",
-    "qrcode": "^1.5.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

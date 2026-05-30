@@ -14,7 +14,6 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import QRCode from "qrcode";
 import { WebSocket, WebSocketServer } from "ws";
 
 type TauSettingsData = {
@@ -493,7 +492,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   // ═══════════════════════════════════════
-  // /qr command — show QR code to connect
+  // /tau command — open web UI in browser
   // ═══════════════════════════════════════
   pi.registerCommand("tau", {
     description: "Open Tau web UI in browser",
@@ -505,21 +504,6 @@ export default function (pi: ExtensionAPI) {
       const { exec } = require("node:child_process");
       exec(`open "${mirrorUrl}"`);
       ctx.ui.notify(`Opened ${mirrorUrl}`, "info");
-    },
-  });
-
-  pi.registerCommand("qr", {
-    description: "Show QR code for Tau mirror URL",
-    handler: async (_args, ctx) => {
-      if (!mirrorUrl) {
-        ctx.ui.notify("Mirror server not running yet", "warning");
-        return;
-      }
-      const qrPageUrl = `${mirrorUrl}/api/qr`;
-      ctx.ui.notify(`Tau: ${mirrorUrl}  •  QR: ${qrPageUrl}`, "info");
-      // Open in default browser
-      const { exec } = require("node:child_process");
-      exec(`open "${qrPageUrl}"`);
     },
   });
 
@@ -1143,29 +1127,6 @@ export default function (pi: ExtensionAPI) {
     if (req.method === "OPTIONS") {
       res.writeHead(200);
       res.end();
-      return;
-    }
-
-    if (urlPath === "/api/qr") {
-      if (!mirrorUrl) {
-        res.writeHead(503, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Server not ready" }));
-        return;
-      }
-      QRCode.toDataURL(mirrorUrl, { width: 256, margin: 2 })
-        .then((dataUrl: string) => {
-          res.writeHead(200, { "Content-Type": "text/html" });
-          res.end(`<!DOCTYPE html>
-<html><head><meta name="viewport" content="width=device-width"><title>Tau — Connect</title>
-<style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#131316;color:#fff;font-family:-apple-system,sans-serif}
-img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rgba(255,255,255,0.5);font-size:13px;margin-top:8px}</style>
-</head><body><img src="${dataUrl}" width="256" height="256" alt="QR Code"><a href="${mirrorUrl}">${mirrorUrl}</a><p style="margin-top:16px">Scan to open Tau on your phone</p></body></html>`);
-        })
-        .catch((e: unknown) => {
-          const message = e instanceof Error ? e.message : String(e);
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: message }));
-        });
       return;
     }
 
@@ -1956,12 +1917,12 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       });
       activeServer.once("error", (err: NodeError) => {
         if (err.code === "EADDRINUSE" && port < PORT + maxAttempts) {
-          ctx.ui.setStatus("mirror", `Mirror: trying port ${port + 1}`);
+          latestCtx?.ui.setStatus("mirror", `Mirror: trying port ${port + 1}`);
           activeServer.removeAllListeners("error");
           tryListen(port + 1, maxAttempts);
         } else {
-          ctx.ui.setStatus("mirror", "");
-          ctx.ui.notify(`Tau mirror failed to start: ${err.message}`, "error");
+          latestCtx?.ui.setStatus("mirror", "");
+          latestCtx?.ui.notify(`Tau mirror failed to start: ${err.message}`, "error");
           stopServer();
         }
       });
@@ -1976,10 +1937,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       const sessionFile = ctx.sessionManager.getSessionFile() || "";
       registerInstance(port, sessionFile, ctx.cwd || process.cwd());
 
-      ctx.ui.notify(
-        `Tau mirror: ${mirrorUrl}  •  /qr for QR code`,
-        "info",
-      );
+      ctx.ui.notify(`Tau mirror: ${mirrorUrl}`, "info");
     };
 
     tryListen(PORT);

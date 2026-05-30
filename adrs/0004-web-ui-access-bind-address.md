@@ -70,8 +70,10 @@ Both can also be set in `~/.pi/agent/settings.json` under `tau.host` and
   access set `TAU_MIRROR_HOST=0.0.0.0` explicitly.
 - **Mobile use case preserved** — users can still access Tau from mobile
   devices by setting `TAU_MIRROR_HOST=0.0.0.0` or using `tailscale serve`.
-- **QR code and `/tau` command** — automatically use the new URL; no separate
-  change needed.
+- **`/tau` command** — automatically uses the new URL; no separate change
+  needed.
+- **QR code** — removed entirely as `127.0.0.1` URLs are not scannable from
+  mobile devices.
 
 ## Alternatives Considered
 
