@@ -22,9 +22,9 @@
     "image": "https://raw.githubusercontent.com/deflating/tau/main/docs/images/dark.png"
   },
   "scripts": {
-    "dev:web": "vite --host 0.0.0.0",
+    "dev:web": "vite --host 127.0.0.1",
     "build:web": "tsc --noEmit && vite build",
-    "preview:web": "vite preview --host 0.0.0.0",
+    "preview:web": "vite preview --host 127.0.0.1",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check .",

@@ -19,6 +19,7 @@ import { WebSocket, WebSocketServer } from "ws";
 
 type TauSettingsData = {
   port?: string | number;
+  host?: string;
   disabled?: boolean;
   user?: string;
   pass?: string;
@@ -153,6 +154,7 @@ type NodeError = Error & {
 // Load tau settings from ~/.pi/agent/settings.json (falls back to env vars)
 function loadTauSettings(): {
   port: number;
+  host: string;
   autoStart: boolean;
   user: string;
   pass: string;
@@ -171,6 +173,7 @@ function loadTauSettings(): {
   } catch {}
   return {
     port: parseInt(String(process.env.TAU_MIRROR_PORT || settings.port || "3001"), 10),
+    host: process.env.TAU_MIRROR_HOST || settings.host || "127.0.0.1",
     autoStart: !(process.env.TAU_DISABLED === "1" || process.env.TAU_DISABLED === "true" || settings.disabled === true),
     user: process.env.TAU_USER || settings.user || "",
     pass: process.env.TAU_PASS || settings.pass || "",
@@ -181,6 +184,7 @@ function loadTauSettings(): {
 
 const TAU_SETTINGS = loadTauSettings();
 const PORT = TAU_SETTINGS.port;
+const TAU_HOST = TAU_SETTINGS.host;
 const TAU_AUTO_START = TAU_SETTINGS.autoStart;
 const AUTH_USER = TAU_SETTINGS.user;
 const AUTH_PASS = TAU_SETTINGS.pass;
@@ -419,7 +423,6 @@ export default function (pi: ExtensionAPI) {
   }
 
   let mirrorUrl = "";
-  let tailscaleUrl = "";
   let mirrorStatusBase = "";
 
   function updateMirrorStatus() {
@@ -458,7 +461,6 @@ export default function (pi: ExtensionAPI) {
     }
     unregisterInstance();
     mirrorUrl = "";
-    tailscaleUrl = "";
     mirrorStatusBase = "";
   }
 
@@ -1150,20 +1152,14 @@ export default function (pi: ExtensionAPI) {
         res.end(JSON.stringify({ error: "Server not ready" }));
         return;
       }
-      const qrPromises = [QRCode.toDataURL(mirrorUrl, { width: 256, margin: 2 })];
-      if (tailscaleUrl) qrPromises.push(QRCode.toDataURL(tailscaleUrl, { width: 256, margin: 2 }));
-      Promise.all(qrPromises)
-        .then((dataUrls: string[]) => {
-          const tsSection =
-            tailscaleUrl && dataUrls[1]
-              ? `<p style="margin-top:24px;color:rgba(255,255,255,0.3);font-size:11px">TAILSCALE</p><img src="${dataUrls[1]}" width="256" height="256" alt="Tailscale QR"><a href="${tailscaleUrl}">${tailscaleUrl}</a>`
-              : "";
+      QRCode.toDataURL(mirrorUrl, { width: 256, margin: 2 })
+        .then((dataUrl: string) => {
           res.writeHead(200, { "Content-Type": "text/html" });
           res.end(`<!DOCTYPE html>
 <html><head><meta name="viewport" content="width=device-width"><title>Tau — Connect</title>
 <style>body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#131316;color:#fff;font-family:-apple-system,sans-serif}
 img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rgba(255,255,255,0.5);font-size:13px;margin-top:8px}</style>
-</head><body><p style="color:rgba(255,255,255,0.3);font-size:11px">LAN</p><img src="${dataUrls[0]}" width="256" height="256" alt="QR Code"><a href="${mirrorUrl}">${mirrorUrl}</a>${tsSection}<p style="margin-top:16px">Scan to open Tau on your phone</p></body></html>`);
+</head><body><img src="${dataUrl}" width="256" height="256" alt="QR Code"><a href="${mirrorUrl}">${mirrorUrl}</a><p style="margin-top:16px">Scan to open Tau on your phone</p></body></html>`);
         })
         .catch((e: unknown) => {
           const message = e instanceof Error ? e.message : String(e);
@@ -1180,7 +1176,6 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
           status: "ok",
           mode: "mirror",
           mirrorUrl,
-          tailscaleUrl: tailscaleUrl || undefined,
         }),
       );
       return;
@@ -1956,7 +1951,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
     const tryListen = (port: number, maxAttempts = 10) => {
       const activeServer = server;
       if (!activeServer) return;
-      activeServer.listen(port, "0.0.0.0", () => {
+      activeServer.listen(port, TAU_HOST, () => {
         onListening(port);
       });
       activeServer.once("error", (err: NodeError) => {
@@ -1973,54 +1968,8 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
     };
 
     const onListening = (port: number) => {
-      // Get local IP for display — prefer en0/en1 (WiFi/Ethernet) over bridges/VPNs
-      const nets = require("node:os").networkInterfaces();
-      let localIp = "localhost";
-      const fallbackIp = "";
-      const preferred = ["en0", "en1"]; // WiFi and Ethernet adapters
-      for (const name of preferred) {
-        for (const net of nets[name] || []) {
-          if (net.family === "IPv4" && !net.internal) {
-            localIp = net.address;
-            break;
-          }
-        }
-        if (localIp !== "localhost") break;
-      }
-      // Fallback: any LAN IP that isn't a bridge or VPN
-      if (localIp === "localhost") {
-        for (const name of Object.keys(nets)) {
-          if (name.startsWith("bridge") || name.startsWith("utun") || name.startsWith("lo")) continue;
-          for (const net of nets[name] || []) {
-            if (
-              net.family === "IPv4" &&
-              !net.internal &&
-              (net.address.startsWith("192.168.") || net.address.startsWith("10."))
-            ) {
-              localIp = net.address;
-              break;
-            }
-          }
-          if (localIp !== "localhost") break;
-        }
-      }
-      if (localIp === "localhost" && fallbackIp) localIp = fallbackIp;
-
-      // Detect Tailscale IP (100.x.x.x CGNAT range)
-      let tailscaleIp = "";
-      for (const name of Object.keys(nets)) {
-        for (const net of nets[name] || []) {
-          if (net.family === "IPv4" && !net.internal && net.address.startsWith("100.")) {
-            tailscaleIp = net.address;
-            break;
-          }
-        }
-        if (tailscaleIp) break;
-      }
-
-      mirrorUrl = `http://${localIp}:${port}`;
-      tailscaleUrl = tailscaleIp ? `http://${tailscaleIp}:${port}` : "";
-      mirrorStatusBase = `Mirror: ${localIp}:${port}${tailscaleIp ? ` • TS: ${tailscaleIp}:${port}` : ""}`;
+      mirrorUrl = `http://${TAU_HOST}:${port}`;
+      mirrorStatusBase = `Mirror: ${TAU_HOST}:${port}`;
       updateMirrorStatus();
 
       // Register this instance
@@ -2028,7 +1977,7 @@ img{border-radius:12px}a{color:#b87a5c;font-size:18px;margin-top:16px}p{color:rg
       registerInstance(port, sessionFile, ctx.cwd || process.cwd());
 
       ctx.ui.notify(
-        `Tau mirror: ${mirrorUrl}${tailscaleUrl ? `  •  Tailscale: ${tailscaleUrl}` : ""}  •  /qr for QR code`,
+        `Tau mirror: ${mirrorUrl}  •  /qr for QR code`,
         "info",
       );
     };
