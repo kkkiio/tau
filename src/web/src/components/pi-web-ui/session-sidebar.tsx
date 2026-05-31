@@ -125,13 +125,13 @@ export function SessionSidebar({
             {!collapsedGroups.has(dir) &&
               filtered.map((session) => {
                 const active = session.filePath === activeSessionFile;
-                const viewed = session.filePath === viewedSessionFile;
+                const selected = session.filePath === (viewedSessionFile ?? activeSessionFile);
                 const favourite = favourites.includes(session.filePath);
                 return (
                   <div
                     className={cn(
                       "group flex items-start gap-2 border-b px-2 py-2 last:border-b-0",
-                      viewed && "bg-muted",
+                      selected && "bg-muted",
                     )}
                     key={session.filePath}
                   >

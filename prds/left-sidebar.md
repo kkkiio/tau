@@ -32,11 +32,11 @@ Sidebar                            Main Panel
 |------|-------------|----------------|
 | Pi 在 /project-a 跑 session 1 | 绿点在 Session 1，标题显示 session 1 名 | 实时聊天，input 可用 |
 | 点击 history 中的 Session 3 | 绿点不动，Session 3 灰底高亮（选中态） | 展示 Session 3 的历史内容，input 不可用 |
-| 点回 Session 1 或"回 live"按钮 | 灰底高亮清除，绿点仍在 Session 1 | 恢复实时聊天，input 恢复 |
+| 点回 Session 1 或"回 live"按钮 | 灰底高亮回到 Session 1，绿点仍在 Session 1 | 恢复实时聊天，input 恢复 |
 
 **核心规则**：
 - **绿点** = 真实活跃 session（唯一来源：mirror_sync），不受任何点击影响
-- **灰底高亮** = 当前正在浏览的 history item（独立于绿点），点击 history item 时设置，回到 live 时清除
+- **灰底高亮** = 当前正在展示的 session item（独立于绿点），浏览 history 时跟随所选 item，回到 live 时回到活跃 session
 - **Active session 标题** = 永远显示绿点对应的 session 名，浏览历史时不变化
 - **Input 区域** = 只在浏览活跃 session 时显示，查看历史时隐藏
 

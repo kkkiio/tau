@@ -538,12 +538,14 @@ export function App() {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (wsRef.current !== ws) return;
         setConnection("connected");
         setError(null);
         fetchHealth();
       };
 
       ws.onmessage = (messageEvent) => {
+        if (wsRef.current !== ws) return;
         try {
           const data = JSON.parse(messageEvent.data) as {
             type?: string;
@@ -575,9 +577,13 @@ export function App() {
         }
       };
 
-      ws.onerror = () => setError("WebSocket error");
+      ws.onerror = () => {
+        if (wsRef.current !== ws) return;
+        setError("WebSocket error");
+      };
 
       ws.onclose = () => {
+        if (wsRef.current !== ws) return;
         setConnection("disconnected");
         wsRef.current = null;
         if (!intentionallyClosed) {
