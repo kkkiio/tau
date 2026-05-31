@@ -31,7 +31,7 @@ Sidebar                            Main Panel
 | 操作 | Sidebar 变化 | Main Panel 变化 |
 |------|-------------|----------------|
 | Pi 在 /project-a 跑 session 1 | 绿点在 Session 1，标题显示 session 1 名 | 实时聊天，input 可用 |
-| 点击 history 中的 Session 3 | 绿点不动，Session 3 灰底高亮（选中态） | 展示 Session 3 的历史内容，input 隐藏 |
+| 点击 history 中的 Session 3 | 绿点不动，Session 3 灰底高亮（选中态） | 展示 Session 3 的历史内容，input 不可用 |
 | 点回 Session 1 或"回 live"按钮 | 灰底高亮清除，绿点仍在 Session 1 | 恢复实时聊天，input 恢复 |
 
 **核心规则**：
@@ -62,7 +62,7 @@ Sidebar                            Main Panel
 
 8. 作为 Pi Web UI 用户，我希望点击历史会话后可以在聊天区域查看其内容（灰底高亮显示当前正在浏览的 item），但这不改变活跃会话指示器（绿点）。
 
-9. 作为 Pi Web UI 用户，浏览历史会话时我希望聊天区域的 input 区域隐藏，以免我误以为可以在此继续对话。回到活跃会话后 input 恢复。
+9. 作为 Pi Web UI 用户，浏览历史会话时我希望聊天区域的 input 区域变为不可用状态（显示提示文字），以免我误以为可以在此继续对话。回到活跃会话后 input 恢复。
 
 ### 设置与工具
 
