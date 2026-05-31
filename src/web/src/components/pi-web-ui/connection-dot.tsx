@@ -2,7 +2,7 @@ import { CircleIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import type { ConnectionState } from "../../tau/types";
+import type { ConnectionState } from "../../core/types";
 
 export function ConnectionDot({ state }: { state: ConnectionState }) {
   return (

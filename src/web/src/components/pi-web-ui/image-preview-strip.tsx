@@ -1,6 +1,6 @@
 import { XIcon } from "lucide-react";
 
-import type { PromptImage } from "../../tau/types";
+import type { PromptImage } from "../../core/types";
 
 export function ImagePreviewStrip({
   images,

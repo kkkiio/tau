@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Tau runs as a Pi agent extension inside the same process and terminal as the Pi
+Pi Web UI runs as a Pi agent extension inside the same process and terminal as the Pi
 interactive TUI. Plain writes to stdout or stderr, including `console.log`,
 `console.warn`, and `console.error`, bypass Pi's renderer. When they happen
 during TUI redraws they can move the cursor, scroll the terminal, and leave

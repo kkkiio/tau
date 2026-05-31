@@ -1,4 +1,4 @@
-# Tau Agent Guide
+# Pi Web UI
 
 Pi extension that mirrors the terminal session in the browser — WebSocket + HTTP server inside Pi, React frontend.
 
@@ -37,7 +37,7 @@ Per `adrs/0001-pi-extension-output-policy.md`: never write to `stdout`/`stderr` 
 
 ### Event forwarding — thin transport
 
-Per `adrs/0002-web-ui-extension-event-protocol.md`: Mirror Server forwards events unchanged. Never interpret extension payloads into Tau product concepts inside the extension. The browser owns feature interpretation.
+Per `adrs/0002-web-ui-extension-event-protocol.md`: Mirror Server forwards events unchanged. Never interpret extension payloads into Pi Web UI product concepts inside the extension. The browser owns feature interpretation. inside the extension. The browser owns feature interpretation.
 
 ### Mandatory Skill Usage
 
@@ -45,7 +45,7 @@ Per `adrs/0002-web-ui-extension-event-protocol.md`: Mirror Server forwards event
 
 ### Overview
 
-Tau is a Pi extension package (`npm:tau-mirror`). It starts an HTTP + WebSocket server inside the Pi process and serves a React frontend built with Vite.
+Pi Web UI is a Pi extension package (`npm:pi-web-ui`). It starts an HTTP + WebSocket server inside the Pi process and serves a React frontend built with Vite.
 
 ### Repo Structure & Important Files
 
@@ -63,7 +63,7 @@ Tau is a Pi extension package (`npm:tau-mirror`). It starts an HTTP + WebSocket 
 │   ├── src/
 │   │   ├── main.tsx             # React entry point
 │   │   ├── app.tsx              # Root App component
-│   │   ├── tau/
+│   │   ├── core/
 │   │   │   ├── ws.ts            # WebSocket client for browser ↔ extension
 │   │   │   ├── types.ts         # TypeScript types for WebSocket protocol
 │   │   │   ├── chat-conversion.ts # Converts raw events → UI message models
@@ -72,7 +72,7 @@ Tau is a Pi extension package (`npm:tau-mirror`). It starts an HTTP + WebSocket 
 │   │   │   ├── tool-summary.ts  # Tool call summary rendering
 │   │   │   └── constants.ts     # Shared constants
 │   │   └── components/
-│   │       ├── tau/             # Tau-specific React components
+│   │       ├── pi-web-ui/       # Pi Web UI components
 │   │       │   ├── chat-item-view.tsx    # Main chat message renderer
 │   │       │   ├── session-sidebar.tsx   # Session list sidebar
 │   │       │   ├── command-palette.tsx   # Command palette
@@ -101,13 +101,10 @@ Tau is a Pi extension package (`npm:tau-mirror`). It starts an HTTP + WebSocket 
 
 ### Architecture: Extension ↔ Frontend Communication
 
-```
-┌─────────────┐     ┌──────────────────────────────┐     ┌─────────────┐
-│  Pi TUI     │     │  Pi Process                  │     │  Browser    │
-│  (terminal) │◄───►│                              │◄───►│  (Tau)      │
-│             │     │  mirror-server.ts            │     │             │
-└─────────────┘     │    ↳ HTTP + WS on :3001      │     └─────────────┘
-                    └──────────────────────────────┘
+```mermaid
+graph LR
+    A[Pi TUI<br/>terminal] <-->|Pi events| B[Pi Process<br/>mirror-server.ts]
+    B <-->|HTTP + WS :3001| C[Browser]
 ```
 
 - **Extension (`mirror-server.ts`)**: subscribes to Pi events via `pi.on(...)`, forwards them to browser WebSocket clients. Accepts commands from browser, executes via extension API.
@@ -149,13 +146,13 @@ Browser sends JSON commands over WebSocket. Commands invoke Pi extension API met
 
 #### Frontend development
 
-Run Pi with Tau on its normal port in one terminal, then:
+Run Pi with Pi Web UI on its normal port in one terminal, then:
 
 ```bash
 npm run dev:web
 ```
 
-Open `http://localhost:4444`. Vite serves the React UI and proxies `/api` and `/ws` to the Tau extension on `localhost:3001`.
+Open `http://localhost:4444`. Vite serves the React UI and proxies `/api` and `/ws` to the Pi Web UI extension on `localhost:3001`.
 
 #### Build for production
 
@@ -166,7 +163,7 @@ npm run build:web
 Output goes to `dist/`. Then run Pi with the built assets:
 
 ```bash
-TAU_STATIC_DIR=$(pwd)/dist pi
+PI_WEB_UI_STATIC_DIR=$(pwd)/dist pi
 ```
 
 #### Install dependencies
@@ -200,15 +197,15 @@ npm run lint
 When adding a new WebSocket event type from the extension to the browser:
 
 1. `extensions/mirror-server.ts` — emit the event
-2. `src/web/src/tau/types.ts` — add the TypeScript type
-3. `src/web/src/tau/chat-conversion.ts` — add conversion logic if it affects chat display
-4. Corresponding React component in `src/web/src/components/tau/`
+2. `src/web/src/core/types.ts` — add the TypeScript type
+3. `src/web/src/core/chat-conversion.ts` — add conversion logic if it affects chat display
+4. Corresponding React component in `src/web/src/components/pi-web-ui/`
 
 When adding a new browser → extension command:
 
-1. `src/web/src/tau/ws.ts` — add the send function
+1. `src/web/src/core/ws.ts` — add the send function
 2. `extensions/mirror-server.ts` — add the command handler (use `latestCtx`)
-3. `src/web/src/tau/types.ts` — add the type
+3. `src/web/src/core/types.ts` — add the type
 
 ### Reference
 

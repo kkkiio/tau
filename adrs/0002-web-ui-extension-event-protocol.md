@@ -6,7 +6,7 @@ Draft
 
 ## Context
 
-Tau currently forwards a fixed set of Pi lifecycle events from `pi.on(...)` to
+Pi Web UI currently forwards a fixed set of Pi lifecycle events from `pi.on(...)` to
 the browser. This is intentionally close to the source event stream: the Web UI
 receives Pi message/tool events and decides how to render them.
 
@@ -19,14 +19,14 @@ a generic `ContextItem` model. That would make Mirror Server own UI semantics.
 This is the wrong split. The issue is not that Mirror Server can never change:
 adding a small subscription list for a newly supported extension is acceptable.
 The boundary is that Mirror Server must not interpret extension payloads into
-Tau product concepts.
+Pi Web UI product concepts.
 
 ## Decision
 
 Mirror Server should remain a thin event transport. It may subscribe to known
 event sources, but it should not translate extension events into UI models.
 
-For WebSocket delivery, Tau will preserve:
+For WebSocket delivery, Pi Web UI will preserve:
 
 - The original event/channel name.
 - The original event payload, unchanged except for JSON serialization.
@@ -53,7 +53,7 @@ Pi core events continue to use the existing protocol:
 
 Extension event-bus events should use the same top-level WebSocket message kind,
 but keep the extension payload nested so event payload fields do not collide with
-Tau's `event.type` field:
+Pi Web UI's `event.type` field:
 
 ```json
 {
@@ -82,7 +82,7 @@ and `event.payload` is exactly what the extension emitted.
 Mirror Server may do only transport-safe work:
 
 - Subscribe to an event source.
-- Wrap the observed event in Tau's WebSocket transport envelope.
+- Wrap the observed event in Pi Web UI's WebSocket transport envelope.
 - Ensure the payload is JSON-serializable.
 - Optionally drop or truncate values that cannot be serialized safely.
 
@@ -112,10 +112,10 @@ explicit allowlist and forwards each payload unchanged.
 This is the default path for `pi-subagents` and for future extensions where a
 small Mirror Server subscription update is acceptable.
 
-### Pattern B: Shared Tau Web Event Channel
+### Pattern B: Shared Pi Web UI Event Channel
 
 For extensions that want to avoid adding a new Mirror Server subscription, emit
-a Tau-visible event through a common channel:
+a Pi Web UI-visible event through a common channel:
 
 ```ts
 pi.events.emit("tau:web:event", {
@@ -180,7 +180,7 @@ The UI behavior for these sources is specified in
 
 ## Recommended Extension Event Design
 
-Extensions that want to render well in Tau should emit self-contained,
+Extensions that want to render well in Pi Web UI should emit self-contained,
 namespaced, JSON-safe events.
 
 Recommended rules:
@@ -251,7 +251,7 @@ for running-state updates.
 - Adding or changing UI behavior should remain a Web UI change.
 - Existing extension event shapes stay visible to the browser.
 - Mirror Server still needs either explicit channel subscriptions for legacy
-  extension events or one shared Tau web event channel for future extensions.
+  extension events or one shared Pi Web UI event channel for future extensions.
 - The Web UI must tolerate unknown event types and ignore events it does not
   understand.
 - Reconnect behavior depends on event replay, session entries, or extension

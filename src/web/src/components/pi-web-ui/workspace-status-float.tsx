@@ -1,8 +1,8 @@
 import { BotIcon, CheckCircle2Icon, Clock3Icon, XCircleIcon } from "lucide-react";
 
-import { formatTokens } from "../../tau/format";
-import { canOpenSubagentDetail, formatDuration, subagentStatusLabel } from "../../tau/subagents";
-import type { SubagentViewState } from "../../tau/types";
+import { formatTokens } from "../../core/format";
+import { canOpenSubagentDetail, formatDuration, subagentStatusLabel } from "../../core/subagents";
+import type { SubagentViewState } from "../../core/types";
 
 export function WorkspaceStatusFloat({
   onOpenSubagent,

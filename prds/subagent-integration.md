@@ -2,25 +2,25 @@
 
 ## Problem Statement
 
-当 Pi 在使用 Agent 工具调用子 agent 时（如 Explore、Plan、general-purpose），用户在 Tau Web UI 中无法感知子 agent 的运行状态和最终结果。一条"Agent completed with response..."的纯文本消息很难让用户快速了解哪些子 agent 已完成、哪个正在运行、执行了多少工具、消耗了多少 token。用户需要一个明确、实时的子 agent 状态面板。
+当 Pi 在使用 Agent 工具调用子 agent 时（如 Explore、Plan、general-purpose），用户在 Pi Web UI Web UI 中无法感知子 agent 的运行状态和最终结果。一条"Agent completed with response..."的纯文本消息很难让用户快速了解哪些子 agent 已完成、哪个正在运行、执行了多少工具、消耗了多少 token。用户需要一个明确、实时的子 agent 状态面板。
 
 ## Solution
 
-在 Tau 中提供子 agent 的多层展示：悬浮状态卡片（WorkspaceStatusFloat）中显示紧凑的子 agent 摘要列表；点击可展开到右侧详情侧边栏查看完整结果和元数据。同时支持从历史记录中恢复子 agent 状态，刷新页面后依然能正确显示之前已完成的子 agent 信息。
+在 Pi Web UI 中提供子 agent 的多层展示：悬浮状态卡片（WorkspaceStatusFloat）中显示紧凑的子 agent 摘要列表；点击可展开到右侧详情侧边栏查看完整结果和元数据。同时支持从历史记录中恢复子 agent 状态，刷新页面后依然能正确显示之前已完成的子 agent 信息。
 
 ## User Stories
 
-1. 作为 Tau 用户，我希望在聊天区域的右上角浮窗中实时看到所有子 agent 的概要（状态、类型、描述、关键指标），这样不用中断聊天就能了解后台执行情况。
+1. 作为 Pi Web UI 用户，我希望在聊天区域的右上角浮窗中实时看到所有子 agent 的概要（状态、类型、描述、关键指标），这样不用中断聊天就能了解后台执行情况。
 
-2. 作为 Tau 用户，我希望浮窗中显示每个子 agent 的紧凑指标——工具调用次数、token 总量、耗时——这样能快速判断子 agent 的进展和规模。
+2. 作为 Pi Web UI 用户，我希望浮窗中显示每个子 agent 的紧凑指标——工具调用次数、token 总量、耗时——这样能快速判断子 agent 的进展和规模。
 
-3. 作为 Tau 用户，当我点击浮窗中的一个已完成或出错的子 agent 行时，我希望右侧详情侧边栏打开并展示该子 agent 的完整结果，包括 Markdown 富文本回复、元数据网格和错误文本，这样能深入审查而不离开聊天。
+3. 作为 Pi Web UI 用户，当我点击浮窗中的一个已完成或出错的子 agent 行时，我希望右侧详情侧边栏打开并展示该子 agent 的完整结果，包括 Markdown 富文本回复、元数据网格和错误文本，这样能深入审查而不离开聊天。
 
-4. 作为 Tau 用户，我希望刷新页面后，之前已完成的子 agent 状态仍能正确恢复显示，这样不会丢失对当前会话进度的认知。
+4. 作为 Pi Web UI 用户，我希望刷新页面后，之前已完成的子 agent 状态仍能正确恢复显示，这样不会丢失对当前会话进度的认知。
 
-5. 作为 Tau 用户，我希望正在运行或排队等待的子 agent 能显示活跃状态，已完成、失败、停止的子 agent 在未被查看前标记为待关注，这样我不会错过需要处理的反馈。
+5. 作为 Pi Web UI 用户，我希望正在运行或排队等待的子 agent 能显示活跃状态，已完成、失败、停止的子 agent 在未被查看前标记为待关注，这样我不会错过需要处理的反馈。
 
-6. 作为 Tau 用户，当新的子 agent 启动时，我希望它自动出现在浮窗的最前面，这样我第一时间知道新任务已经开始。
+6. 作为 Pi Web UI 用户，当新的子 agent 启动时，我希望它自动出现在浮窗的最前面，这样我第一时间知道新任务已经开始。
 
 ## Implementation Decisions
 

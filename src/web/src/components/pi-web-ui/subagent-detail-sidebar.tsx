@@ -4,9 +4,9 @@ import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback
 import { MessageResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 
-import { copyText, formatTokens } from "../../tau/format";
-import { formatDuration, subagentStatusLabel } from "../../tau/subagents";
-import type { SubagentViewState } from "../../tau/types";
+import { copyText, formatTokens } from "../../core/format";
+import { formatDuration, subagentStatusLabel } from "../../core/subagents";
+import type { SubagentViewState } from "../../core/types";
 
 const DEFAULT_WIDTH = 420;
 const MIN_WIDTH = 320;

@@ -2,8 +2,8 @@ import { XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-import { formatTokens } from "../../tau/format";
-import type { Usage } from "../../tau/types";
+import { formatTokens } from "../../core/format";
+import type { Usage } from "../../core/types";
 
 export function ContextPopover({
   contextWindowSize,

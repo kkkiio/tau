@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-import { THINKING_LEVELS } from "../../tau/constants";
-import type { ThemeMode } from "../../tau/types";
+import { THINKING_LEVELS } from "../../core/constants";
+import type { ThemeMode } from "../../core/types";
 import { Modal } from "./modal";
 
 export function SettingsPanel(props: {

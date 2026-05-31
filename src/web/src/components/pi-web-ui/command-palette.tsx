@@ -1,4 +1,4 @@
-import type { CommandAction } from "../../tau/types";
+import type { CommandAction } from "../../core/types";
 import { Modal } from "./modal";
 
 export function CommandPalette({ commands, onClose }: { commands: CommandAction[]; onClose: () => void }) {

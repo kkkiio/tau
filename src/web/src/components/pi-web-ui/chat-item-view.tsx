@@ -12,8 +12,8 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-e
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import { cn } from "@/lib/utils";
 
-import { formatToolSummary, isToolExpandable } from "../../tau/tool-summary";
-import type { ChatItem } from "../../tau/types";
+import { formatToolSummary, isToolExpandable } from "../../core/tool-summary";
+import type { ChatItem } from "../../core/types";
 
 export function ChatItemView({
   item,

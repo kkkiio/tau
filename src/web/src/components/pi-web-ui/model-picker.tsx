@@ -3,8 +3,8 @@ import { CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import { formatTokens, shortModelName } from "../../tau/format";
-import type { ModelInfo } from "../../tau/types";
+import { formatTokens, shortModelName } from "../../core/format";
+import type { ModelInfo } from "../../core/types";
 import { Modal } from "./modal";
 
 export function ModelPicker({

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-import type { ExtensionDialog } from "../../tau/types";
+import type { ExtensionDialog } from "../../core/types";
 import { Modal } from "./modal";
 
 export function ExtensionDialogView({

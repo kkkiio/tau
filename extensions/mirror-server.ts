@@ -1,12 +1,12 @@
 /**
- * Mirror Server Extension
+ * pi-web-ui Mirror Server Extension
  *
  * Starts a WebSocket + HTTP server inside the running Pi process,
  * allowing a browser to connect and mirror the TUI session in real-time.
  *
  * - Forwards all Pi events to connected browser clients
  * - Accepts commands from the browser and executes them via the extension API
- * - Serves static files for the Tau web UI
+ * - Serves static files for the pi-web-ui frontend
  * - Sends full state snapshot on client connect (messages, model, etc.)
  */
 
@@ -16,21 +16,10 @@ import * as path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { WebSocket, WebSocketServer } from "ws";
 
-type TauSettingsData = {
+type SettingsData = {
   port?: string | number;
   host?: string;
   disabled?: boolean;
-  user?: string;
-  pass?: string;
-  authEnabled?: boolean;
-  projectsDir?: string;
-};
-
-type RunningInstance = {
-  port: number;
-  pid: number;
-  sessionFile: string;
-  cwd: string;
 };
 
 type BrowserImage = {
@@ -150,47 +139,39 @@ type NodeError = Error & {
   code?: string;
 };
 
-// Load tau settings from ~/.pi/agent/settings.json (falls back to env vars)
-function loadTauSettings(): {
+// Load pi-web-ui settings from ~/.pi/agent/settings.json (falls back to env vars)
+function loadSettings(): {
   port: number;
   host: string;
   autoStart: boolean;
-  user: string;
-  pass: string;
-  authEnabled?: boolean;
-  projectsDir?: string;
 } {
-  let settings: TauSettingsData = {};
+  let settings: SettingsData = {};
   try {
     const settingsPath = path.join(process.env.HOME || "~", ".pi/agent/settings.json");
     settings =
       (
         JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
-          tau?: TauSettingsData;
+          "pi-web-ui"?: SettingsData;
         }
-      ).tau || {};
+      )["pi-web-ui"] || {};
   } catch {}
   return {
-    port: parseInt(String(process.env.TAU_MIRROR_PORT || settings.port || "3001"), 10),
-    host: process.env.TAU_MIRROR_HOST || settings.host || "127.0.0.1",
-    autoStart: !(process.env.TAU_DISABLED === "1" || process.env.TAU_DISABLED === "true" || settings.disabled === true),
-    user: process.env.TAU_USER || settings.user || "",
-    pass: process.env.TAU_PASS || settings.pass || "",
-    authEnabled: settings.authEnabled,
-    projectsDir: process.env.TAU_PROJECTS_DIR || settings.projectsDir,
+    port: parseInt(String(process.env.PI_WEB_UI_PORT || settings.port || "3001"), 10),
+    host: process.env.PI_WEB_UI_HOST || settings.host || "127.0.0.1",
+    autoStart: !(
+      process.env.PI_WEB_UI_DISABLED === "1" ||
+      process.env.PI_WEB_UI_DISABLED === "true" ||
+      settings.disabled === true
+    ),
   };
 }
 
-const TAU_SETTINGS = loadTauSettings();
-const PORT = TAU_SETTINGS.port;
-const TAU_HOST = TAU_SETTINGS.host;
-const TAU_AUTO_START = TAU_SETTINGS.autoStart;
-const AUTH_USER = TAU_SETTINGS.user;
-const AUTH_PASS = TAU_SETTINGS.pass;
-const AUTH_CONFIGURED = !!(AUTH_USER && AUTH_PASS);
-let authEnabled = AUTH_CONFIGURED && TAU_SETTINGS.authEnabled !== false;
+const SETTINGS = loadSettings();
+const PORT = SETTINGS.port;
+const HOST = SETTINGS.host;
+const AUTO_START = SETTINGS.autoStart;
 // @ts-expect-error — __dirname is provided by jiti at runtime
-const STATIC_DIR = process.env.TAU_STATIC_DIR || findStaticDir();
+const STATIC_DIR = process.env.PI_WEB_UI_STATIC_DIR || findStaticDir();
 
 function findStaticDir(): string {
   const candidates: string[] = [];
@@ -211,7 +192,7 @@ function findStaticDir(): string {
   // 2) Installed package path (for npm-installed extension execution)
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pkgPath = require.resolve("tau-mirror/package.json");
+    const pkgPath = require.resolve("pi-web-ui/package.json");
     const pkgDir = path.dirname(pkgPath);
     addCandidate(path.join(pkgDir, "dist"));
     addCandidate(path.join(pkgDir, "public"));
@@ -220,8 +201,8 @@ function findStaticDir(): string {
   // 3) Development fallback from current working directory
   addCandidate(path.resolve(process.cwd(), "dist"));
   addCandidate(path.resolve(process.cwd(), "public"));
-  addCandidate(path.resolve(process.cwd(), "node_modules/tau-mirror/dist"));
-  addCandidate(path.resolve(process.cwd(), "node_modules/tau-mirror/public"));
+  addCandidate(path.resolve(process.cwd(), "node_modules/pi-web-ui/dist"));
+  addCandidate(path.resolve(process.cwd(), "node_modules/pi-web-ui/public"));
 
   for (const candidate of candidates) {
     if (fs.existsSync(path.join(candidate, "index.html"))) return candidate;
@@ -230,117 +211,6 @@ function findStaticDir(): string {
   return path.resolve(process.cwd(), "dist");
 }
 const SESSIONS_DIR = path.join(process.env.HOME || "~", ".pi/agent/sessions");
-const INSTANCES_DIR = path.join(process.env.HOME || "~", ".pi/tau-instances");
-
-// Instance registry — tracks all running Tau servers
-function registerInstance(port: number, sessionFile: string, cwd: string) {
-  fs.mkdirSync(INSTANCES_DIR, { recursive: true });
-  const info = {
-    port,
-    pid: process.pid,
-    sessionFile,
-    cwd,
-    startedAt: new Date().toISOString(),
-  };
-  fs.writeFileSync(path.join(INSTANCES_DIR, `${process.pid}.json`), JSON.stringify(info));
-}
-
-function updateInstanceSession(sessionFile: string) {
-  const file = path.join(INSTANCES_DIR, `${process.pid}.json`);
-  if (!fs.existsSync(file)) return;
-  try {
-    const info = JSON.parse(fs.readFileSync(file, "utf8")) as RunningInstance;
-    info.sessionFile = sessionFile;
-    fs.writeFileSync(file, JSON.stringify(info));
-  } catch {}
-}
-
-function unregisterInstance() {
-  try {
-    fs.unlinkSync(path.join(INSTANCES_DIR, `${process.pid}.json`));
-  } catch {}
-}
-
-function getRunningInstances(): Array<{
-  port: number;
-  pid: number;
-  sessionFile: string;
-  cwd: string;
-}> {
-  if (!fs.existsSync(INSTANCES_DIR)) return [];
-  const instances: RunningInstance[] = [];
-  for (const file of fs.readdirSync(INSTANCES_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      const info = JSON.parse(fs.readFileSync(path.join(INSTANCES_DIR, file), "utf8")) as
-        | RunningInstance
-        | Partial<RunningInstance>;
-      if (typeof info.pid !== "number") continue;
-      // Check if process is still alive
-      try {
-        process.kill(info.pid, 0);
-        instances.push(info as RunningInstance);
-      } catch {
-        // Process dead — clean up stale file
-        try {
-          fs.unlinkSync(path.join(INSTANCES_DIR, file));
-        } catch {}
-      }
-    } catch {}
-  }
-  return instances;
-}
-
-/**
- * Kill zombie Tau instances — processes that are alive but orphaned
- * (e.g. tmux pane was killed without session_shutdown firing).
- * A zombie is detected by checking if the process has a controlling terminal.
- * If it doesn't, the HTTP server is the only thing keeping it alive.
- */
-function cleanupZombieInstances() {
-  if (!fs.existsSync(INSTANCES_DIR)) return;
-  const { execSync } = require("node:child_process");
-  for (const file of fs.readdirSync(INSTANCES_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      const info = JSON.parse(fs.readFileSync(path.join(INSTANCES_DIR, file), "utf8")) as
-        | RunningInstance
-        | Partial<RunningInstance>;
-      if (typeof info.pid !== "number") continue;
-      // Skip our own process
-      if (info.pid === process.pid) continue;
-      // Check if process is alive
-      try {
-        process.kill(info.pid, 0);
-      } catch {
-        // Already dead — clean up
-        try {
-          fs.unlinkSync(path.join(INSTANCES_DIR, file));
-        } catch {}
-        continue;
-      }
-      // Check if process has a controlling terminal (TTY)
-      // Orphaned processes from killed tmux panes lose their TTY
-      try {
-        const tty = execSync(`ps -o tty= -p ${info.pid}`, {
-          encoding: "utf8",
-        }).trim();
-        if (!tty || tty === "??" || tty === "-") {
-          // No terminal — this is a zombie, kill it
-          process.kill(info.pid, "SIGTERM");
-          try {
-            fs.unlinkSync(path.join(INSTANCES_DIR, file));
-          } catch {}
-        }
-      } catch {
-        // ps failed — process might have died between checks, clean up
-        try {
-          fs.unlinkSync(path.join(INSTANCES_DIR, file));
-        } catch {}
-      }
-    } catch {}
-  }
-}
 
 // MIME types for static file serving
 const MIME_TYPES: Record<string, string> = {
@@ -360,36 +230,6 @@ const MIME_TYPES: Record<string, string> = {
   ".woff": "font/woff",
   ".woff2": "font/woff2",
 };
-
-function saveTauSetting(key: string, value: unknown) {
-  const settingsPath = path.join(process.env.HOME || "~", ".pi/agent/settings.json");
-  try {
-    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
-      tau?: Record<string, unknown>;
-    };
-    if (!settings.tau) settings.tau = {};
-    settings.tau[key] = value;
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
-  } catch {}
-}
-
-function checkBasicAuth(req: http.IncomingMessage): boolean {
-  if (!authEnabled) return true;
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Basic ")) return false;
-  const decoded = Buffer.from(header.slice(6), "base64").toString();
-  const colon = decoded.indexOf(":");
-  if (colon === -1) return false;
-  return decoded.slice(0, colon) === AUTH_USER && decoded.slice(colon + 1) === AUTH_PASS;
-}
-
-function sendAuthRequired(res: http.ServerResponse) {
-  res.writeHead(401, {
-    "WWW-Authenticate": 'Basic realm="Tau"',
-    "Content-Type": "application/json",
-  });
-  res.end(JSON.stringify({ error: "Unauthorized" }));
-}
 
 export default function (pi: ExtensionAPI) {
   let server: http.Server | null = null;
@@ -427,12 +267,12 @@ export default function (pi: ExtensionAPI) {
 
   function updateMirrorStatus() {
     if (!mirrorStatusBase) {
-      latestCtx?.ui.setStatus("mirror", "");
+      latestCtx?.ui.setStatus("webui", "");
       return;
     }
     const clientCount = clients.size;
     const clientText = clientCount > 0 ? ` • ${clientCount} web ${clientCount === 1 ? "client" : "clients"}` : "";
-    latestCtx?.ui.setStatus("mirror", `${mirrorStatusBase}${clientText}`);
+    latestCtx?.ui.setStatus("webui", `${mirrorStatusBase}${clientText}`);
   }
 
   // ═══════════════════════════════════════
@@ -459,47 +299,46 @@ export default function (pi: ExtensionAPI) {
       } catch {}
       server = null;
     }
-    unregisterInstance();
     mirrorUrl = "";
     mirrorStatusBase = "";
   }
 
   // ═══════════════════════════════════════
-  // /tau-stop and /tau-start commands
+  // /webui-stop and /webui-start commands
   // ═══════════════════════════════════════
-  pi.registerCommand("taustop", {
-    description: "Stop the Tau mirror server",
+  pi.registerCommand("webui-stop", {
+    description: "Stop the pi-web-ui server",
     handler: async (_args, ctx) => {
       if (!server) {
-        ctx.ui.notify("Tau is not running", "warning");
+        ctx.ui.notify("pi-web-ui is not running", "warning");
         return;
       }
       stopServer();
-      ctx.ui.setStatus("mirror", "");
-      ctx.ui.notify("Tau mirror server stopped", "info");
+      ctx.ui.setStatus("webui", "");
+      ctx.ui.notify("pi-web-ui server stopped", "info");
     },
   });
 
-  pi.registerCommand("taustart", {
-    description: "Start the Tau mirror server",
+  pi.registerCommand("webui-start", {
+    description: "Start the pi-web-ui server",
     handler: async (_args, ctx) => {
       if (server) {
-        ctx.ui.notify(`Tau is already running at ${mirrorUrl}`, "warning");
+        ctx.ui.notify(`pi-web-ui is already running at ${mirrorUrl}`, "warning");
         return;
       }
       startServer(ctx);
-      ctx.ui.notify("Tau mirror server starting...", "info");
+      ctx.ui.notify("pi-web-ui server starting...", "info");
     },
   });
 
   // ═══════════════════════════════════════
-  // /tau command — open web UI in browser
+  // /webui command — open Pi Web UI in browser
   // ═══════════════════════════════════════
-  pi.registerCommand("tau", {
-    description: "Open Tau web UI in browser",
+  pi.registerCommand("webui", {
+    description: "Open Pi Web UI in browser",
     handler: async (_args, ctx) => {
       if (!mirrorUrl) {
-        ctx.ui.notify("Mirror server not running yet", "warning");
+        ctx.ui.notify("pi-web-ui server not running yet", "warning");
         return;
       }
       const { exec } = require("node:child_process");
@@ -579,8 +418,6 @@ export default function (pi: ExtensionAPI) {
     turnCount = 0;
     titleSet = false;
     userMessages = [];
-    // Update instance registry with new session file
-    updateInstanceSession(ctx.sessionManager.getSessionFile() || "");
   });
 
   pi.on("turn_start", async (_event, _ctx) => {
@@ -1037,34 +874,24 @@ export default function (pi: ExtensionAPI) {
 
         // ─── Auth ───
         case "get_auth": {
-          sendTo(
-            ws,
-            success("get_auth", {
-              configured: AUTH_CONFIGURED,
-              enabled: authEnabled,
-            }),
-          );
+          sendTo(ws, success("get_auth", { configured: false, enabled: false }));
           break;
         }
 
         case "set_auth": {
-          if (!AUTH_CONFIGURED) {
-            sendTo(ws, error("set_auth", "No credentials configured. Set tau.user and tau.pass in settings.json"));
-            break;
-          }
-          authEnabled = !!command.enabled;
-          saveTauSetting("authEnabled", authEnabled);
-          broadcast({
-            type: "event",
-            event: { type: "auth_changed", enabled: authEnabled },
-          });
-          sendTo(ws, success("set_auth", { enabled: authEnabled }));
+          sendTo(
+            ws,
+            error(
+              "set_auth",
+              "Authentication is not supported. Use tailscale serve or a reverse proxy with TLS for remote access.",
+            ),
+          );
           break;
         }
 
         case "navigate_tree": {
           if (!latestNavigateTree) {
-            sendTo(ws, error("navigate_tree", "Run /tau first to enable editing"));
+            sendTo(ws, error("navigate_tree", "Run /webui first to enable editing"));
             break;
           }
           if (!latestCtx?.isIdle()) {
@@ -1108,12 +935,6 @@ export default function (pi: ExtensionAPI) {
   // ═══════════════════════════════════════
   function serveStaticFile(req: http.IncomingMessage, res: http.ServerResponse) {
     let urlPath = req.url || "/";
-
-    // Auth gate — exempt /api/health for monitoring
-    if (authEnabled && urlPath !== "/api/health" && !checkBasicAuth(req)) {
-      sendAuthRequired(res);
-      return;
-    }
 
     // Handle API routes
     if (urlPath.startsWith("/api/")) {
@@ -1172,19 +993,10 @@ export default function (pi: ExtensionAPI) {
       res.end(
         JSON.stringify({
           status: "ok",
-          mode: "mirror",
+          mode: "webui",
           mirrorUrl,
         }),
       );
-      return;
-    }
-
-    if (urlPath === "/api/instances") {
-      res.writeHead(200, {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      });
-      res.end(JSON.stringify({ instances: getRunningInstances() }));
       return;
     }
 
@@ -1393,7 +1205,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   function serveProjectsList(res: http.ServerResponse) {
-    const projectsDir = TAU_SETTINGS.projectsDir;
+    const projectsDir = process.env.PI_WEB_UI_PROJECTS_DIR;
     if (!projectsDir) {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ projects: [] }));
@@ -1412,8 +1224,6 @@ export default function (pi: ExtensionAPI) {
 
     try {
       const entries = fs.readdirSync(resolved, { withFileTypes: true });
-      const instances = getRunningInstances();
-
       // Build session count + recency map from session history
       const sessionInfo = new Map<string, { count: number; lastActive: number }>();
       if (fs.existsSync(SESSIONS_DIR)) {
@@ -1446,13 +1256,11 @@ export default function (pi: ExtensionAPI) {
         .map((e) => {
           const fullPath = path.join(resolved, e.name);
           const info = sessionInfo.get(fullPath) || { count: 0, lastActive: 0 };
-          const isActive = instances.some((i) => i.cwd === fullPath);
           return {
             name: e.name,
             path: fullPath,
             sessionCount: info.count,
             lastActive: info.lastActive || null,
-            active: isActive,
           };
         });
 
@@ -1498,6 +1306,7 @@ export default function (pi: ExtensionAPI) {
                 ...parsed,
                 file,
                 filePath,
+                projectPath: decodedPath,
                 mtime: stat.mtimeMs,
                 ...(isTmux && { tmux: true }),
               });
@@ -1852,18 +1661,10 @@ export default function (pi: ExtensionAPI) {
   function startServer(ctx: ExtensionContext) {
     if (server) return; // Already running
 
-    // Clean up zombie instances from killed tmux panes etc.
-    cleanupZombieInstances();
-
     server = http.createServer(serveStaticFile);
     wss = new WebSocketServer({ noServer: true });
 
     server.on("upgrade", (request, socket, head) => {
-      if (authEnabled && !checkBasicAuth(request)) {
-        socket.write('HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm="Tau"\r\n\r\n');
-        socket.destroy();
-        return;
-      }
       if (request.url === "/ws") {
         const activeWss = wss;
         if (!activeWss) {
@@ -1949,32 +1750,28 @@ export default function (pi: ExtensionAPI) {
     const tryListen = (port: number, maxAttempts = 10) => {
       const activeServer = server;
       if (!activeServer) return;
-      activeServer.listen(port, TAU_HOST, () => {
+      activeServer.listen(port, HOST, () => {
         onListening(port);
       });
       activeServer.once("error", (err: NodeError) => {
         if (err.code === "EADDRINUSE" && port < PORT + maxAttempts) {
-          latestCtx?.ui.setStatus("mirror", `Mirror: trying port ${port + 1}`);
+          latestCtx?.ui.setStatus("webui", `pi-web-ui: trying port ${port + 1}`);
           activeServer.removeAllListeners("error");
           tryListen(port + 1, maxAttempts);
         } else {
-          latestCtx?.ui.setStatus("mirror", "");
-          latestCtx?.ui.notify(`Tau mirror failed to start: ${err.message}`, "error");
+          latestCtx?.ui.setStatus("webui", "");
+          latestCtx?.ui.notify(`pi-web-ui failed to start: ${err.message}`, "error");
           stopServer();
         }
       });
     };
 
     const onListening = (port: number) => {
-      mirrorUrl = `http://${TAU_HOST}:${port}`;
-      mirrorStatusBase = `Mirror: ${TAU_HOST}:${port}`;
+      mirrorUrl = `http://${HOST}:${port}`;
+      mirrorStatusBase = `pi-web-ui: ${HOST}:${port}`;
       updateMirrorStatus();
 
-      // Register this instance
-      const sessionFile = ctx.sessionManager.getSessionFile() || "";
-      registerInstance(port, sessionFile, ctx.cwd || process.cwd());
-
-      ctx.ui.notify(`Tau mirror: ${mirrorUrl}`, "info");
+      ctx.ui.notify(`pi-web-ui: ${mirrorUrl}`, "info");
     };
 
     tryListen(PORT);
@@ -1986,7 +1783,7 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     latestCtx = ctx;
 
-    if (!TAU_AUTO_START) {
+    if (!AUTO_START) {
       return;
     }
 

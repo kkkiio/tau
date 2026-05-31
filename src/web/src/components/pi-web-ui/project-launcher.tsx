@@ -1,6 +1,6 @@
 import { CircleIcon, FolderOpenIcon, PlayIcon } from "lucide-react";
 
-import type { LaunchProject } from "../../tau/types";
+import type { LaunchProject } from "../../core/types";
 
 export function ProjectLauncher({
   loading,
@@ -16,7 +16,7 @@ export function ProjectLauncher({
   if (!projects.length) {
     return (
       <div className="p-4 text-muted-foreground text-sm">
-        No projects directory configured. Add <code>tau.projectsDir</code> to settings.
+        No projects directory configured. Add <code>pi-web-ui.projectsDir</code> to settings.
       </div>
     );
   }

@@ -6,7 +6,7 @@ Draft
 
 ## Context
 
-Tau's Web UI sends user prompts to Pi through a WebSocket connection. The
+Pi Web UI's Web UI sends user prompts to Pi through a WebSocket connection. The
 mirror-server extension receives `{ type: "prompt", message: "/discuss" }` and
 calls `pi.sendUserMessage(message)`.
 
@@ -129,7 +129,7 @@ unnecessary cost and latency with no user value.
 ### B. Extension emits a custom event via EventBus
 
 pi-discuss could emit `discussion_mode_entered` / `discussion_mode_exited`
-through `pi.events`. tau-mirror could subscribe and forward to the Web UI.
+through `pi.events`. pi-web-ui could subscribe and forward to the Web UI.
 
 Not mutually exclusive with this ADR. This is a better approach for rich UI
 state (e.g., displaying a "💬 discussing" indicator in the Web UI), but it does
@@ -143,7 +143,7 @@ Currently `pi.sendUserMessage` is fire-and-forget and returns `undefined`. The
 Pi framework could be changed to return a promise that resolves with whether the
 message was intercepted.
 
-Rejected as out of scope for tau-mirror. It would require a Pi framework change.
+Rejected as out of scope for pi-web-ui. It would require a Pi framework change.
 
 ## Consequences
 

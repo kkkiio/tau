@@ -147,7 +147,7 @@ export async function processPromptFiles(files: unknown[] | undefined): Promise<
     try {
       images.push(await processImageFile(file));
     } catch (err) {
-      console.error("[Tau] Image processing failed:", err);
+      console.error("[pi-web-ui] Image processing failed:", err);
     }
   }
   return images;

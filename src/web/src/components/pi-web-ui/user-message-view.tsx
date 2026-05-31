@@ -10,7 +10,7 @@ import {
 } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 
-import type { ChatItem } from "../../tau/types";
+import type { ChatItem } from "../../core/types";
 import { ImagePreviewStrip } from "./image-preview-strip";
 
 export function UserMessageView({

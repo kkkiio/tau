@@ -185,6 +185,8 @@ export type SessionInfo = {
   name?: string;
   firstMessage?: string;
   timestamp?: string;
+  cwd?: string;
+  projectPath?: string;
   tmux?: boolean;
 };
 

@@ -1,6 +1,6 @@
 {
-  "name": "Tau",
-  "short_name": "Tau",
+  "name": "Pi Web UI",
+  "short_name": "Pi Web UI",
   "description": "Web UI for pi coding agent",
   "start_url": "/",
   "display": "standalone",
