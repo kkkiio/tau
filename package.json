@@ -1,6 +1,6 @@
 {
   "name": "pi-web-ui",
-  "version": "2.0.0",
+  "version": "0.1.0",
   "description": "Web UI for Pi coding agent — view and control your Pi session from the browser",
   "keywords": [
     "pi",
@@ -8,14 +8,11 @@
     "coding-agent",
     "web-ui"
   ],
-  "author": "deflating",
-  "contributors": [
-    "kkkiio"
-  ],
+  "author": "kkkiio",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/deflating/tau.git"
+    "url": "https://github.com/xieziheng/tau.git"
   },
   "pi": {
     "extensions": [
