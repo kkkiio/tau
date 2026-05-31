@@ -24,12 +24,6 @@ Install from GitHub:
 pi install git:github.com/kkkiio/pi-web-ui
 ```
 
-After the package is published to the npm registry, you can also use:
-
-```bash
-pi install npm:pi-web-ui
-```
-
 ## Usage
 
 1. Start Pi in your terminal
