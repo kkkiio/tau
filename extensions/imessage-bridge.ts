@@ -16,7 +16,7 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as https from "node:https";
 import * as path from "node:path";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type BlueBubblesChat = {
   chatIdentifier?: string;
