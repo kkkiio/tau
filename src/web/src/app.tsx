@@ -5,12 +5,8 @@ import {
   ChevronsUpDownIcon,
   CommandIcon,
   DownloadIcon,
-  MenuIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
-  RefreshCwIcon,
-  SearchIcon,
-  Settings2Icon,
   TerminalIcon,
   XIcon,
 } from "lucide-react";
@@ -34,6 +30,8 @@ import { Input } from "@/components/ui/input";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
+  AppSidebar,
+  AppSidebarContent,
   ChatItemView,
   CommandPalette,
   ConnectionDot,
@@ -96,7 +94,7 @@ export function App() {
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
 
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 900);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [projects, setProjects] = useState<ProjectGroup[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionQuery, setSessionQuery] = useState("");
@@ -946,86 +944,34 @@ export function App() {
   return (
     <TooltipProvider>
       <main className="flex h-full min-h-0 bg-background text-foreground">
-        <aside
-          className={cn(
-            "fixed inset-y-0 left-0 z-40 flex flex-col overflow-hidden border-r bg-background transition-all md:static md:z-auto",
-            sidebarOpen ? "w-80" : "w-12",
-          )}
+        <AppSidebar
+          open={sidebarOpen}
+          onToggle={setSidebarOpen}
+          onOpenSettings={openSettings}
         >
-          {/* Toggle — absolutely positioned so it never moves during width transition */}
-          <div className="absolute left-0 top-0 flex h-14 w-12 items-center justify-center">
-            <Button onClick={() => setSidebarOpen((open) => !open)} size="icon-sm" type="button" variant="ghost">
-              <MenuIcon className="size-4" />
-            </Button>
-          </div>
-
-          <div
-            className={cn(
-              "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
-              sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
-            )}
-          >
-            <div className={cn("flex h-14 shrink-0 items-center gap-2 border-b pl-12 pr-3")}>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm">Pi Web UI</div>
-                <div className="text-muted-foreground text-xs">Browser interface for Pi</div>
-              </div>
-              <Button onClick={loadSessions} size="icon-sm" type="button" variant="ghost">
-                <RefreshCwIcon className="size-4" />
-              </Button>
-            </div>
-
-            {/* Active session info */}
-            <div className="border-b p-3">
-              <div className="flex items-center gap-2">
-                <ConnectionDot state={connection} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{sessionName}</div>
-                  <div className="text-muted-foreground text-xs">{modelLabel}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* History */}
-            <div className="border-b px-3 py-2">
-              <div className="font-medium text-xs">History</div>
-              <div className="relative mt-2">
-                <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                <Input
-                  className="pl-8"
-                  onChange={(event) => setSessionQuery(event.target.value)}
-                  placeholder="Search history..."
-                  value={sessionQuery}
-                />
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto p-2">
-              <SessionSidebar
-                activeSessionFile={activeSessionFile}
-                viewedSessionFile={viewedSessionFile}
-                favourites={favourites}
-                loading={sessionsLoading}
-                onSelect={selectSession}
-                onToggleFavourite={(filePath) =>
-                  setFavourites((current) =>
-                    current.includes(filePath) ? current.filter((item) => item !== filePath) : [...current, filePath],
-                  )
-                }
-                projects={projects}
-                query={sessionQuery}
-                searchResults={searchResults}
-              />
-            </div>
-
-            <div className="shrink-0 border-t p-2">
-              <Button className="w-full justify-start gap-2" onClick={openSettings} type="button" variant="ghost">
-                <Settings2Icon className="size-4" />
-                <span>Settings</span>
-              </Button>
-            </div>
-          </div>
-        </aside>
+          <AppSidebarContent
+            connection={connection}
+            sessionName={sessionName}
+            modelLabel={modelLabel}
+            sessionQuery={sessionQuery}
+            sessionsLoading={sessionsLoading}
+            activeSessionFile={activeSessionFile}
+            viewedSessionFile={viewedSessionFile}
+            favourites={favourites}
+            projects={projects}
+            searchResults={searchResults}
+            onToggle={setSidebarOpen}
+            onOpenSettings={openSettings}
+            onLoadSessions={loadSessions}
+            onSessionQueryChange={setSessionQuery}
+            onSelectSession={selectSession}
+            onToggleFavourite={(filePath) =>
+              setFavourites((current) =>
+                current.includes(filePath) ? current.filter((item) => item !== filePath) : [...current, filePath],
+              )
+            }
+          />
+        </AppSidebar>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-3">

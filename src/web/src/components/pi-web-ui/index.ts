@@ -1,3 +1,5 @@
+export { AppSidebar } from "./app-sidebar";
+export { AppSidebarContent } from "./app-sidebar-content";
 export { ChatItemView } from "./chat-item-view";
 export { CommandPalette } from "./command-palette";
 export { ConnectionDot } from "./connection-dot";
