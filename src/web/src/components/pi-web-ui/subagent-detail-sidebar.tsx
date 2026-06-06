@@ -12,7 +12,7 @@ const DEFAULT_WIDTH = 420;
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 760;
 const MIN_CHAT_WIDTH = 480;
-const STORAGE_KEY = "tau-subagent-sidebar-width";
+const STORAGE_KEY = "pi-web-ui-subagent-sidebar-width";
 
 export function SubagentDetailSidebar({ agent, onClose }: { agent: SubagentViewState; onClose: () => void }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => getInitialWidth());

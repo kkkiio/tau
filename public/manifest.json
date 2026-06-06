@@ -9,17 +9,17 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "icons/tau-192.png",
+      "src": "icons/pi-web-ui-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "icons/tau-512.png",
+      "src": "icons/pi-web-ui-512.png",
       "sizes": "512x512",
       "type": "image/png"
     },
     {
-      "src": "icons/tau-maskable-512.png",
+      "src": "icons/pi-web-ui-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
